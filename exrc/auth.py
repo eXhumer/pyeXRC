@@ -13,126 +13,94 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime as html_date_parser
 from json import dump as json_dump, load as json_load
 from pathlib import Path
-from pkg_resources import require
 from random import SystemRandom
 from string import ascii_letters, digits
-from typing import Type, Optional, List, Dict, Any, Tuple, Callable
+from typing import List, Dict, Tuple, Callable
 from urllib.parse import urlencode, urlparse, parse_qs
 from webbrowser import open as webbrowser_open
 from wsgiref.simple_server import make_server
 
-from requests import Session, Response
+from requests import Session
 from requests.auth import HTTPBasicAuth
-from requests.utils import default_user_agent
 
+from . import __version__
 from .exception import (
     OAuth2Exception,
     ResponseException,
-    InvalidInvocationException,
 )
 from .utils import NoLoggingWSGIRequestHandler
 
 
-class OAuth2ClientCredential(object):
-    def __init__(self, **auth_options: str) -> None:
-        super().__init__()
-        self.__client_id = (
-            auth_options["client_id"]
-            if "client_id" in auth_options
-            and isinstance(auth_options["client_id"], str)
-            else None
-        )
-        self.__client_secret = (
-            auth_options["client_secret"]
-            if "client_secret" in auth_options
-            and isinstance(auth_options["client_secret"], str)
-            else None
-        )
-
-    @property
-    def valid(self) -> bool:
-        return self.__client_id is not None
-
-    @property
-    def client_id(self) -> str | None:
-        return self.__client_id
-
-    @property
-    def client_secret(self) -> str | None:
-        return self.__client_secret
-
-    def revoke_credential(self) -> List[Response]:
-        self.__client_id = None
-        self.__client_secret = None
-        return []
-
-
-class OAuth2WSGIAuthCodeExchangeApp(object):
-    """
-    Keyword Arguments
-    ------
-    client_id: str
-    redirect_uri: str
-    scopes: List[str]
-    state: str
-    duration: str
-    """
+class OAuth2WSGICodeFlowExchangeApp:
     def __init__(
         self,
-        **auth_options: str | List[str] | OAuth2ClientCredential,
-    ) -> None:
-        super().__init__()
-        self.__authcode: Optional[str] = None
-        self.__client_id: str = auth_options["client_id"]
-        self.__redirect_uri: str = auth_options["redirect_uri"]
-        self.__scopes: List[str] = auth_options["scopes"]
-        self.__state: str = auth_options["state"]
-        self.__duration: str = auth_options["duration"]
-        self.__external_endpoint = "/auth"
-        self.__callback_endpoint = urlparse(self.__redirect_uri).path
+        client_id: str,
+        callback_url: str,
+        scopes: List[str],
+        state: str,
+        duration: str,
+    ):
+        if not callback_url.startswith((
+            "http://localhost",
+            "http://127.0.0.1",
+        )):
+            raise ValueError("Unsupported redirect URI!")
 
-        if (
-            self.__duration not in ["permanent", "temporary"]
-            or not self.__redirect_uri.startswith(
-                ("http://localhost", "http://127.0.0.1")
-            )
-        ):
-            raise InvalidInvocationException(
-                "One or more of the provided keyword arguments in invalid!"
-            )
+        if duration not in ("temporary", "permanent"):
+            raise ValueError("Invalid duration!")
+
+        self.__authcode: str | None = None
+        self.__client_id: str = client_id
+        self.__callback_url: str = callback_url
+        self.__scopes: List[str] = scopes
+        self.__state: str = state
+        self.__duration: str = duration
+        self.__callback_endpoint = urlparse(self.__callback_url).path
+        self.home_endpoint = "/"
+        self.authorize_endpoint = "/authorize"
 
     def __call__(
         self,
         environ: Dict[str, str],
         start_resp: Callable[[str, List[Tuple[str, str]]], None],
-    ) -> bytes:
+    ):
         req_method = environ["REQUEST_METHOD"]
         req_uri = environ["PATH_INFO"]
         req_query = parse_qs(environ["QUERY_STRING"])
 
         if req_method == "GET":
-            if req_uri == "/":
+            if req_uri == self.home_endpoint:
                 start_resp("200 OK", [
                     ("Content-Type", "text/html"),
                 ])
                 return ["".join([
-                    f'<a href="{self.__external_endpoint}">',
-                    "Authenticate with Reddit user account!",
+                    f'<a href="{self.authorize_endpoint}">',
+                    "Authorize eXRC with Reddit account!",
                     "</a>",
                 ]).encode("utf8")]
 
-            elif req_uri == self.__external_endpoint:
+            elif req_uri == self.authorize_endpoint:
                 start_resp(
                     "302 Moved Temporarily",
-                    [("Location", self.__authorize_url)],
+                    [
+                        (
+                            "Location",
+                            OAuth2Credential.authorize(
+                                self.__client_id,
+                                self.__state,
+                                self.__callback_url,
+                                self.__scopes,
+                                self.__duration,
+                            ),
+                        ),
+                    ],
                 )
-                return []
+                return [b""]
 
             elif req_uri == self.__callback_endpoint:
                 if "error" in req_query:
@@ -184,214 +152,127 @@ class OAuth2WSGIAuthCodeExchangeApp(object):
         else:
             start_resp("405 Method Not Allowed", [])
             return [
-                "Authentication server only supports".encode("utf8"),
+                "Authorization server only supports".encode("utf8"),
                 " HTTP GET requests!".encode("utf8"),
             ]
 
     @property
-    def authcode(self) -> str | None:
+    def authcode(self):
         return self.__authcode
 
-    @property
-    def __authorize_url(self) -> str:
-        auth_qs = {
-            "client_id": self.__client_id,
-            "response_type": "code",
-            "state": self.__state,
-            "redirect_uri": self.__redirect_uri,
-            "scope": " ".join(self.__scopes),
-            "duration": self.__duration,
-        }
 
-        return f"https://www.reddit.com/api/v1/authorize?{urlencode(auth_qs)}"
-
-
-class OAuth2Credential(OAuth2ClientCredential):
-    __client_version = require("eXRC")[0].version
-    req_session = Session()
+class OAuth2Credential:
     auth_base_url = "https://www.reddit.com"
-    revoke_endpoint = "/api/v1/revoke_token"
-    access_endpoint = "/api/v1/access_token"
+    revoke_endpoint = "api/v1/revoke_token"
+    access_endpoint = "api/v1/access_token"
+    authorize_endpoint = "api/v1/authorize"
 
     @staticmethod
-    def client_version() -> str:
-        return OAuth2Credential.__client_version
+    def authorize(
+        client_id: str,
+        state: str,
+        callback_url: str,
+        scopes: List[str],
+        duration: str,
+    ):
+        return "?".join((
+            "/".join((
+                OAuth2Credential.auth_base_url,
+                OAuth2Credential.authorize_endpoint,
+            )),
+            urlencode({
+                "client_id": client_id,
+                "response_type": "code",
+                "state": state,
+                "redirect_uri": callback_url,
+                "scope": " ".join(scopes),
+                "duration": duration,
+            }),
+        ))
 
     @staticmethod
-    def __session_ua_check(**auth_options: str):
-        if "user_agent" in auth_options:
-            OAuth2Credential.req_session.headers["User-Agent"] = \
-                auth_options["user_agent"]
-
-        if OAuth2Credential.req_session.headers["User-Agent"] == \
-                default_user_agent:
-            OAuth2Credential.req_session.headers["User-Agent"] = \
-                f"eXRC/{OAuth2Credential.__client_version}"
-
-    @staticmethod
-    def valid_oauth_scopes() -> Dict[str, Dict[str, str]]:
-        OAuth2Credential.__session_ua_check()
-        res = OAuth2Credential.req_session.get(
-            "https://www.reddit.com/api/v1/scopes"
+    def valid_oauth_scopes(session: Session) -> Dict[str, Dict[str, str]]:
+        res = session.get(
+            "https://www.reddit.com/api/v1/scopes",
+            headers={
+                "User-Agent": f"{__package__}/{__version__}",
+            },
         )
 
         if res.status_code != 200:
             raise ResponseException(
-                res, "ERROR: Failed to retrieve Reddit valid scopes!"
+                res, "Failed to retrieve Reddit valid scopes!"
             )
 
         return res.json()
 
     def __init__(
         self,
-        **auth_options: str | datetime | List[str],
-    ) -> None:
-        super().__init__(**auth_options)
-        OAuth2Credential.__session_ua_check(**auth_options)
-
-        self.__access_token: Optional[str] = (
-            auth_options["access_token"]
-            if (
-                "access_token" in auth_options
-                and isinstance(auth_options["access_token"], str)
-            )
-            else None
-        )
-        self.__expires_at: Optional[datetime] = (
-            auth_options["expires_at"]
-            if (
-                "expires_at" in auth_options
-                and isinstance(auth_options["expires_at"], datetime)
-            )
-            else None
-        )
-        self.__scopes: Optional[List[str]] = (
-            auth_options["scopes"]
-            if (
-                "scopes" in auth_options
-                and isinstance(auth_options["scopes"], list)
-            )
-            else None
-        )
-        if self.__scopes is not None:
-            for scope in self.__scopes:
-                if not isinstance(scope, str):
-                    self.__scopes = None
-                    break
-        self.__token_type: Optional[str] = (
-            auth_options["token_type"]
-            if (
-                "token_type" in auth_options
-                and isinstance(auth_options["token_type"], str)
-            )
-            else None
-        )
-        self.__device_id: Optional[str] = (
-            auth_options["device_id"]
-            if (
-                "device_id" in auth_options
-                and isinstance(auth_options["device_id"], str)
-            )
-            else None
-        )
-        self.__refresh_token: Optional[str] = (
-            auth_options["refresh_token"]
-            if (
-                "refresh_token" in auth_options
-                and isinstance(auth_options["refresh_token"], str)
-            )
-            else None
-        )
+        access_token: str,
+        expires_at: datetime,
+        scopes: List[str],
+        token_type: str,
+        device_id: str | None = None,
+        refresh_token: str | None = None,
+    ):
+        self.__access_token = access_token
+        self.__expires_at = expires_at
+        self.__scopes = scopes
+        self.__token_type = token_type
+        self.__device_id = device_id
+        self.__refresh_token = refresh_token
 
     @property
-    def valid(self) -> bool:
-        # Check for client credential first
-        return super().valid and (
-            self.__access_token is not None
-            and self.__expires_at is not None
-            and self.__token_type is not None
-            and self.__scopes is not None
-        )
-
-    @property
-    def expired(self) -> bool:
-        if self.__expires_at is not None:
-            return datetime.now(tz=timezone.utc) >= self.__expires_at
-
-        return True
-
-    @property
-    def access_token(self) -> str | None:
+    def access_token(self):
         return self.__access_token
 
     @property
-    def refresh_token(self) -> str | None:
-        return self.__refresh_token
-
-    @property
-    def device_id(self) -> str | None:
-        return self.__device_id
-
-    @property
-    def scopes(self) -> List[str] | None:
-        return self.__scopes
-
-    @property
-    def token_type(self) -> str | None:
-        return self.__token_type
-
-    @property
-    def expires_at(self) -> datetime | None:
+    def expires_at(self):
         return self.__expires_at
 
     @property
-    def json(self) -> Dict[str, Any]:
-        if self.valid:
-            json_data = {
-                "access_token": self.__access_token,
-                "expires_at": self.__expires_at.isoformat(),
-                "token_type": self.__token_type,
-                "scopes": self.__scopes,
-            }
+    def expired(self):
+        return datetime.now(tz=timezone.utc) >= self.__expires_at
 
-            if self.__device_id is not None:
-                json_data.update({"device_id": self.__device_id})
+    @property
+    def scopes(self):
+        return self.__scopes
 
-            if self.__refresh_token is not None:
-                json_data.update({"refresh_token": self.__refresh_token})
+    @property
+    def token_type(self):
+        return self.__token_type
 
-            return json_data
+    @property
+    def refresh_token(self):
+        return self.__refresh_token
 
-        return {}
+    @property
+    def device_id(self):
+        return self.__device_id
 
-    def revoke_credential(self) -> List[Response]:
-        OAuth2Credential.__session_ua_check()
+    @property
+    def authorization(self):
+        return f"{self.__token_type} {self.__access_token}"
 
-        results = []
+    def revoke(self, session: Session, client_id: str, client_secret: str):
+        data = urlencode({
+            "token": self.__access_token,
+            "token_type_hint": "access_token",
+        })
 
-        if self.__access_token is not None and not self.expired:
-            data = urlencode({
-                "token": self.__access_token,
-                "token_type_hint": "access_token",
-            })
-
-            results.append(
-                OAuth2Credential.req_session.post(
-                    OAuth2Credential.auth_base_url
-                    + OAuth2Credential.revoke_endpoint,
-                    data=data,
-                    headers={
-                        "Content-Type": "application/x-www-form-urlencoded",
-                        "Content-Length": f"{len(data)}",
-                    },
-                    auth=HTTPBasicAuth(
-                        self.client_id,
-                        self.client_secret
-                        if self.client_secret is not None
-                        else "",
-                    ),
-                )
-            )
+        res = session.post(
+            "/".join((
+                OAuth2Credential.auth_base_url,
+                OAuth2Credential.revoke_endpoint,
+            )),
+            data=data,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": f"{len(data)}",
+                "User-Agent": f"{__package__}/{__version__}",
+            },
+            auth=HTTPBasicAuth(client_id, client_secret),
+        )
 
         if self.__refresh_token is not None:
             data = urlencode({
@@ -399,484 +280,347 @@ class OAuth2Credential(OAuth2ClientCredential):
                 "token_type_hint": "refresh_token",
             })
 
-            results.append(
-                OAuth2Credential.req_session.post(
-                    OAuth2Credential.auth_base_url
-                    + OAuth2Credential.revoke_endpoint,
-                    data=data,
-                    headers={
-                        "Content-Type": "application/x-www-form-urlencoded",
-                        "Content-Length": f"{len(data)}",
-                    },
-                    auth=HTTPBasicAuth(
-                        self.client_id,
-                        self.client_secret
-                        if self.client_secret is not None
-                        else "",
-                    ),
-                )
+            res = session.post(
+                "/".join((
+                    OAuth2Credential.auth_base_url,
+                    OAuth2Credential.revoke_endpoint,
+                )),
+                data=data,
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Content-Length": f"{len(data)}",
+                    "User-Agent": f"{__package__}/{__version__}",
+                },
+                auth=HTTPBasicAuth(client_id, client_secret),
             )
 
-        super().revoke_credential()
+        return res
 
-        return results
+    def refresh(self, session: Session, client_id: str, client_secret: str):
+        if self.__refresh_token is None:
+            raise OAuth2Exception("Attempting to refresh credential without" +
+                                  " refresh token!")
 
-    def save_credential(self, **save_options: Path) -> None:
-        with save_options["token_path"].open(mode="w") as out_token_stream:
+        data = urlencode({
+            "grant_type": "refresh_token",
+            "refresh_token": self.__refresh_token,
+        })
+
+        res = session.post(
+            "/".join((
+                OAuth2Credential.auth_base_url,
+                OAuth2Credential.access_endpoint,
+            )),
+            data=data,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": f"{len(data)}",
+                "User-Agent": f"{__package__}/{__version__}",
+            },
+            auth=HTTPBasicAuth(client_id, client_secret),
+        )
+
+        if res.status_code != 200:
+            raise ResponseException(
+                res,
+                "Failed to refresh OAuth2 credential!",
+            )
+
+        token_data = res.json()
+        self.__access_token = token_data["access_token"]
+        if "refresh_token" in token_data:
+            self.__refresh_token = token_data["refresh_token"]
+        self.__expires_at = html_date_parser(res.headers["Date"]) \
+            + timedelta(seconds=token_data["expires_in"])
+        self.__scopes = token_data["scope"].split(" ")
+        self.__token_type = token_data["token_type"]
+
+        if "refresh_token" in token_data:
+            self.__refresh_token = token_data["refresh_token"]
+
+    def save_to_file(self, token_path: Path):
+        json_data = {
+            "access_token": self.__access_token,
+            "expires_at": self.__expires_at.isoformat(),
+            "token_type": self.__token_type,
+            "scopes": self.__scopes,
+        }
+
+        if self.__device_id is not None:
+            json_data.update({"device_id": self.__device_id})
+
+        if self.__refresh_token is not None:
+            json_data.update({"refresh_token": self.__refresh_token})
+
+        with token_path.open(mode="w") as out_stream:
             json_dump(
-                self.json,
-                out_token_stream,
+                json_data,
+                out_stream,
                 sort_keys=True,
                 indent=4,
             )
 
     @classmethod
-    def load_credential(
-        cls: Type[OAuth2Credential],
-        **load_options: Path | str,
-    ) -> OAuth2Credential:
-        OAuth2Credential.__session_ua_check(**load_options)
-        token_path = Path(load_options["token_path"])
+    def load_from_file(cls, token_path: Path):
+        with token_path.open(mode="r") as token_stream:
+            token_data = json_load(token_stream)
+            device_id = (
+                token_data["device_id"]
+                if "device_id" in token_data
+                else None
+            )
+            refresh_token = (
+                token_data["refresh_token"]
+                if "refresh_token" in token_data
+                else None
+            )
 
-        if (
-            "client_id" in load_options
-            and isinstance(load_options["client_id"], str)
-            and token_path.exists()
-        ):
-            with token_path.open(mode="r") as token_stream:
-                token_data = json_load(token_stream)
-                valid_token_data = (
-                    (
-                        "access_token" in token_data
-                        and isinstance(token_data["access_token"], str)
-                    ) and (
-                        "expires_at" in token_data
-                        and isinstance(token_data["expires_at"], str)
-                    ) and (
-                        "scopes" in token_data
-                        and isinstance(token_data["scopes"], list)
-                        # missing check for each list item
-                    ) and (
-                        "token_type" in token_data
-                        and isinstance(token_data["token_type"], str)
-                    )
-                )
-
-                if valid_token_data is True:
-                    client_secret = token_data["client_secret"] if (
-                        "client_secret" in token_data
-                        and isinstance(token_data["client_secret"], str)
-                    ) else None
-                    refresh_token = token_data["refresh_token"] if (
-                        "refresh_token" in token_data
-                        and isinstance(token_data["refresh_token"], str)
-                    ) else None
-                    device_id = token_data["device_id"] if (
-                        "device_id" in token_data
-                        and isinstance(token_data["device_id"], str)
-                    ) else None
-
-                    return cls(
-                        client_id=load_options["client_id"],
-                        client_secret=client_secret,
-                        access_token=token_data["access_token"],
-                        expires_at=datetime.fromisoformat(
-                            token_data["expires_at"]
-                        ),
-                        scopes=token_data["scopes"],
-                        token_type=token_data["token_type"],
-                        refresh_token=refresh_token,
-                        device_id=device_id,
-                    )
-
-        return cls()
+            return cls(
+                token_data["access_token"],
+                datetime.fromisoformat(token_data["expires_at"]),
+                token_data["scopes"],
+                token_data["token_type"],
+                refresh_token=refresh_token,
+                device_id=device_id,
+            )
 
     @classmethod
-    def auth_new_user_script(
-        cls: Type[OAuth2Credential],
-        **auth_options: str | int,
-    ) -> OAuth2Credential:
-        OAuth2Credential.__session_ua_check(**auth_options)
-
-        client_id = (
-            auth_options["client_id"]
-            if (
-                "client_id" in auth_options
-                and isinstance(auth_options["client_id"], str)
-            )
-            else None
-        )
-        client_secret = (
-            auth_options["client_secret"]
-            if (
-                "client_secret" in auth_options
-                and isinstance(auth_options["client_secret"], str)
-            )
-            else None
-        )
-        username = (
-            auth_options["username"]
-            if (
-                "username" in auth_options
-                and isinstance(auth_options["username"], str)
-            )
-            else None
-        )
-        password = (
-            auth_options["password"]
-            if (
-                "password" in auth_options
-                and isinstance(auth_options["password"], str)
-            )
-            else None
-        )
-        two_factor_code = (
-            auth_options["two_factor_code"]
-            if (
-                "two_factor_code" in auth_options
-                and isinstance(auth_options["two_factor_code"], str)
-                and len(auth_options["two_factor_code"]) == 6
-                and auth_options["two_factor_code"].isnumeric()
-            )
-            else None
-        )
+    def password_grant(
+        cls,
+        session: Session,
+        client_id: str,
+        client_secret: str,
+        username: str,
+        password: str,
+        two_factor_code: str | None = None,
+    ):
         if two_factor_code is not None:
+            if len(two_factor_code) == 6 and two_factor_code.isnumeric():
+                raise ValueError("Invalid two factor code! Must be of length" +
+                                 " 6 and must be numeric!")
+
             password = f"{password}:{two_factor_code}"
 
-        if (
-            username is not None
-            and password is not None
-            and client_id is not None
-            and client_secret is not None
-        ):
-            data = urlencode(
-                {
-                    "grant_type": "password",
-                    "username": username,
-                    "password": password,
-                }
-            )
-
-            res = OAuth2Credential.req_session.post(
-                OAuth2Credential.auth_base_url
-                + OAuth2Credential.access_endpoint,
-                data=data,
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Content-Length": f"{len(data)}",
-                },
-                auth=HTTPBasicAuth(client_id, client_secret),
-            )
-
-            if res.status_code == 200:
-                access_token = res.json()["access_token"]
-                expires_at = (
-                    html_date_parser(res.headers["Date"])
-                    + timedelta(seconds=res.json()["expires_in"])
-                )
-                scopes = res.json()["scope"].split(" ")
-                token_type = res.json()["token_type"]
-                return cls(
-                    client_id=client_id,
-                    client_secret=client_secret,
-                    access_token=access_token,
-                    expires_at=expires_at,
-                    scopes=scopes,
-                    token_type=token_type,
-                )
-
-            elif res.status_code == 401:
-                raise ResponseException(
-                    res, "ERROR: Invalid client credential!",
-                )
-
-        return cls()
-
-    @classmethod
-    def auth_client_credential(
-        cls: Type[OAuth2Credential],
-        **auth_options: str | int,
-    ) -> OAuth2Credential:
-        OAuth2Credential.__session_ua_check(**auth_options)
-
-        client_id = (
-            auth_options["client_id"]
-            if (
-                "client_id" in auth_options
-                and isinstance(auth_options["client_id"], str)
-            )
-            else None
-        )
-        client_secret = (
-            auth_options["client_secret"]
-            if (
-                "client_secret" in auth_options
-                and isinstance(auth_options["client_secret"], str)
-            )
-            else None
+        data = urlencode(
+            {
+                "grant_type": "password",
+                "username": username,
+                "password": password,
+            }
         )
 
-        if client_id is not None and client_secret is not None:
-            data = urlencode({"grant_type": "client_credentials"})
+        res = session.post(
+            "/".join((
+                OAuth2Credential.auth_base_url,
+                OAuth2Credential.access_endpoint,
+            )),
+            data=data,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": f"{len(data)}",
+                "User-Agent": f"{__package__}/{__version__}",
+            },
+            auth=HTTPBasicAuth(client_id, client_secret),
+        )
 
-            res = OAuth2Credential.req_session.post(
-                OAuth2Credential.auth_base_url
-                + OAuth2Credential.access_endpoint,
-                data=data,
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Content-Length": f"{len(data)}",
-                },
-                auth=HTTPBasicAuth(client_id, client_secret),
+        if res.status_code != 200:
+            raise ResponseException(
+                res,
+                "Failed to get OAuth2 credential via password flow!",
             )
 
-            if res.status_code == 200:
-                return cls(
-                    client_id=client_id,
-                    client_secret=client_secret,
-                    access_token=res.json()["access_token"],
-                    scopes=res.json()["scope"].split(" "),
-                    expires_at=(
-                        html_date_parser(res.headers["Date"])
-                        + timedelta(seconds=res.json()["expires_in"])
-                    ),
-                    token_type=res.json()["token_type"],
-                )
-
-        return cls()
+        return cls(
+            res.json()["access_token"],
+            (
+                html_date_parser(res.headers["Date"])
+                + timedelta(seconds=res.json()["expires_in"])
+            ),
+            res.json()["scope"].split(" "),
+            res.json()["token_type"],
+        )
 
     @classmethod
-    def auth_installed_client(
-        cls: Type[OAuth2Credential],
-        **auth_options: str,
-    ) -> OAuth2Credential:
-        OAuth2Credential.__session_ua_check(**auth_options)
+    def client_credential_grant(
+        cls,
+        session: Session,
+        client_id: str,
+        client_secret: str,
+    ):
+        data = urlencode({"grant_type": "client_credentials"})
 
-        client_id = (
-            auth_options["client_id"]
-            if (
-                "client_id" in auth_options
-                and isinstance(auth_options["client_id"], str)
+        res = session.post(
+            "/".join((
+                OAuth2Credential.auth_base_url,
+                OAuth2Credential.access_endpoint,
+            )),
+            data=data,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": f"{len(data)}",
+                "User-Agent": f"{__package__}/{__version__}",
+            },
+            auth=HTTPBasicAuth(client_id, client_secret),
+        )
+
+        if res.status_code != 200:
+            raise ResponseException(
+                res,
+                "Failed to get OAuth2 credential via client credential flow!",
             )
+
+        return cls(
+            res.json()["access_token"],
+            (
+                html_date_parser(res.headers["Date"])
+                + timedelta(seconds=res.json()["expires_in"])
+            ),
+            res.json()["scope"].split(" "),
+            res.json()["token_type"],
+        )
+
+    @classmethod
+    def installed_client_grant(
+        cls,
+        session: Session,
+        client_id: str,
+        client_secret: str,
+        device_id: str = "".join([
+            SystemRandom().choice(ascii_letters + digits)
+            for _ in range(30)
+        ]),
+    ):
+        data = urlencode(
+            {
+                "grant_type": "https://oauth.reddit.com/grants/" +
+                "installed_client",
+                "device_id": device_id,
+            }
+        )
+
+        res = session.post(
+            "/".join((
+                OAuth2Credential.auth_base_url,
+                OAuth2Credential.access_endpoint,
+            )),
+            data=data,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": f"{len(data)}",
+                "User-Agent": f"{__package__}/{__version__}",
+            },
+            auth=HTTPBasicAuth(client_id, client_secret),
+        )
+
+        if res.status_code != 200:
+            raise ResponseException(
+                res,
+                "Failed to get OAuth2 credential via installed " +
+                "application flow!",
+            )
+
+        return cls(
+            client_id=client_id,
+            access_token=res.json()["access_token"],
+            token_type=res.json()["token_type"],
+            scopes=res.json()["scope"].split(" "),
+            expires_at=(
+                html_date_parser(res.headers["Date"])
+                + timedelta(seconds=res.json()["expires_in"])
+            ),
+            device_id=res.json()["device_id"],
+        )
+
+    @classmethod
+    def authorization_code_grant(
+        cls,
+        session: Session,
+        client_id: str,
+        client_secret: str,
+        authcode: str,
+        callback_url: str,
+    ):
+        data = urlencode({
+            "code": authcode,
+            "grant_type": "authorization_code",
+            "redirect_uri": callback_url,
+        })
+
+        res = session.post(
+            "/".join((
+                OAuth2Credential.auth_base_url,
+                OAuth2Credential.access_endpoint,
+            )),
+            data=data,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": f"{len(data)}",
+                "User-Agent": f"{__package__}/{__version__}",
+            },
+            auth=HTTPBasicAuth(client_id, client_secret),
+        )
+
+        if res.status_code != 200:
+            raise ResponseException(
+                res,
+                "Failed to retrieve OAuth2 credential from authorization " +
+                "code!",
+            )
+
+        token_data = res.json()
+        refresh_token = (
+            token_data["refresh_token"]
+            if "refresh_token" in token_data
             else None
         )
 
-        if client_id is not None:
-            client_secret = (
-                auth_options["client_secret"]
-                if (
-                    "client_secret" in auth_options
-                    and isinstance(auth_options["client_secret"], str)
-                )
-                else ""
-            )
-            device_id = (
-                auth_options["device_id"]
-                if (
-                    "device_id" in auth_options
-                    and isinstance(auth_options["device_id"], str)
-                )
-                else "".join([
-                    SystemRandom().choice(ascii_letters + digits)
-                    for _ in range(30)
-                ])
-            )
-
-            data = urlencode(
-                {
-                    "grant_type": "https://oauth.reddit.com/grants/" +
-                    "installed_client",
-                    "device_id": device_id,
-                }
-            )
-
-            res = OAuth2Credential.req_session.post(
-                OAuth2Credential.auth_base_url
-                + OAuth2Credential.access_endpoint,
-                data=data,
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Content-Length": f"{len(data)}",
-                },
-                auth=HTTPBasicAuth(client_id, client_secret),
-            )
-
-            if res.status_code == 200:
-                return cls(
-                    client_id=client_id,
-                    access_token=res.json()["access_token"],
-                    token_type=res.json()["token_type"],
-                    scopes=res.json()["scope"].split(" "),
-                    expires_at=(
-                        html_date_parser(res.headers["Date"])
-                        + timedelta(seconds=res.json()["expires_in"])
-                    ),
-                    device_id=res.json()["device_id"],
-                )
-
-            elif res.status_code == 401:
-                raise ResponseException(
-                    res, "ERROR: Invalid client credential!",
-                )
-
-        return cls()
+        return cls(
+            token_data["access_token"],
+            (
+                html_date_parser(res.headers["Date"]) +
+                timedelta(seconds=token_data["expires_in"])
+            ),
+            token_data["scope"].split(" "),
+            token_data["token_type"],
+            refresh_token=refresh_token,
+        )
 
     @classmethod
-    def from_authorization_code(
-        cls: Type[OAuth2Credential],
-        **auth_options: str | List[str],
-    ) -> OAuth2Credential:
-        OAuth2Credential.__session_ua_check(**auth_options)
+    def localserver_code_flow(
+        cls,
+        session: Session,
+        client_id: str,
+        client_secret: str,
+        callback_url: str,
+        duration: str,
+        scopes: List[str],
+        state: str,
+    ):
+        netloc = urlparse(callback_url).netloc
+        netloc_parts = netloc.split(":", maxsplit=1)
+        host = netloc_parts[0]
+        port = int(netloc_parts[1]) if len(netloc_parts) == 2 else 80
+        wsgi_app = OAuth2WSGICodeFlowExchangeApp(
+            client_id,
+            callback_url,
+            scopes,
+            state,
+            duration,
+        )
+        wsgi_server = make_server(
+            host,
+            port,
+            wsgi_app,
+            handler_class=NoLoggingWSGIRequestHandler,
+        )
+        webbrowser_open(f"http://{netloc}/")
 
-        if (
-            "authcode" in auth_options
-            and "client_id" in auth_options
-        ):
-            data = urlencode({
-                "code": auth_options["authcode"],
-                "grant_type": "authorization_code",
-                "redirect_uri": auth_options["redirect_uri"],
-            })
+        while wsgi_app.authcode is None:
+            wsgi_server.handle_request()
 
-            res = OAuth2Credential.req_session.post(
-                OAuth2Credential.auth_base_url
-                + OAuth2Credential.access_endpoint,
-                data=data,
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Content-Length": f"{len(data)}",
-                },
-                auth=HTTPBasicAuth(
-                    auth_options["client_id"],
-                    auth_options["client_secret"]
-                    if "client_secret" in auth_options
-                    else "",
-                ),
-            )
-
-            if res.status_code == 200:
-                token_data = res.json()
-
-                return cls(
-                    client_id=auth_options["client_id"],
-                    client_secret=auth_options["client_secret"]
-                    if "client_secret" in auth_options
-                    else "",
-                    access_token=token_data["access_token"],
-                    token_type=token_data["token_type"],
-                    expires_at=html_date_parser(res.headers["Date"]) +
-                    timedelta(seconds=token_data["expires_in"]),
-                    scopes=token_data["scope"].split(" "),
-                    refresh_token=token_data["refresh_token"]
-                    if "refresh_token" in token_data
-                    else None,
-                )
-
-        return cls()
-
-    def refresh_credential(self) -> None:
-        if self.valid:
-            client_id = self.client_id
-            client_secret = self.client_secret
-
-            if not self.expired:
-                self.revoke_credential()
-
-            data = urlencode({
-                "grant_type": "refresh_token",
-                "refresh_token": self.__refresh_token,
-            })
-
-            res = OAuth2Credential.req_session.post(
-                OAuth2Credential.auth_base_url
-                + OAuth2Credential.access_endpoint,
-                data=data,
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Content-Length": f"{len(data)}",
-                },
-                auth=HTTPBasicAuth(client_id, client_secret),
-            )
-
-            if res.status_code == 200:
-                token_data = res.json()
-                self._client_id = client_id
-                self._client_secret = client_secret
-                self.__access_token = token_data["access_token"]
-                if "refresh_token" in token_data:
-                    self.__refresh_token = token_data["refresh_token"]
-                self.__expires_at = html_date_parser(res.headers["Date"]) \
-                    + timedelta(seconds=token_data["expires_in"])
-                self.__scopes = token_data["scope"].split(" ")
-                self.__token_type = token_data["token_type"]
-                return
-
-            elif res.status_code == 401:
-                raise ResponseException(
-                    res, "ERROR: Invalid client credential!"
-                )
-
-            else:
-                raise ResponseException(
-                    res, "ERROR: Unknown error while refreshing credential!"
-                )
-
-        else:
-            raise OAuth2Exception("Invalid credential!")
-
-    @classmethod
-    def auth_new_user_localserver_authcode_flow(
-        cls: Type[OAuth2Credential],
-        **auth_options: str | List[str],
-    ) -> OAuth2Credential:
-        if (
-            "client_id" in auth_options
-            and "redirect_uri" in auth_options
-            and (
-                auth_options["redirect_uri"].startswith("http://localhost")
-                or auth_options["redirect_uri"].startswith("http://127.0.0.1")
-            )
-        ):
-            netloc: str = urlparse(auth_options["redirect_uri"]).netloc
-            netloc_parts = netloc.split(":", maxsplit=1)
-            host = netloc_parts[0]
-            port = int(netloc_parts[1]) if len(netloc_parts) == 2 else 80
-            wsgi_app = OAuth2WSGIAuthCodeExchangeApp(**auth_options)
-            wsgi_server = make_server(
-                host,
-                port,
-                wsgi_app,
-                handler_class=NoLoggingWSGIRequestHandler,
-            )
-            webbrowser_open(f"http://{netloc}/")
-
-            while wsgi_app.authcode is None:
-                wsgi_server.handle_request()
-
-            return cls.from_authorization_code(
-                authcode=wsgi_app.authcode,
-                **auth_options,
-            )
-
-        return cls()
-
-    @property
-    def authorization(self) -> str:
-        if self.valid is False:
-            raise OAuth2Exception(
-                "ERROR: No authorization available for invalid credential!",
-            )
-
-        if self.expired:
-            if self.__refresh_token is None:
-                raise OAuth2Exception(
-                    "ERROR: Authorization credential expired with no "
-                    + "refresh token!",
-                )
-
-            self.refresh_credential()
-
-        return " ".join([
-            self.__token_type,
-            self.__access_token,
-        ])
+        return cls.authorization_code_grant(
+            session,
+            client_id,
+            client_secret,
+            wsgi_app.authcode,
+            callback_url,
+        )
