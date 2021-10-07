@@ -15,8 +15,11 @@
 
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
+from random import SystemRandom
+from string import ascii_letters, digits
+from typing import List
 
-from requests import Response, Session
+from requests import Session
 
 from . import __version__
 from .auth import OAuth2Credential
@@ -56,12 +59,12 @@ class OAuth2Client:
     def ratelimit_used() -> int | None:
         return OAuth2Client.__ratelimit_status["used"]
 
-    def request(
+    def __request(
         self,
         method: str,
         api_endpoint: str,
         **req_opts,
-    ) -> Response:
+    ):
         while api_endpoint.startswith("/"):
             api_endpoint = api_endpoint[1:]
 
@@ -113,54 +116,194 @@ class OAuth2Client:
     def get(
         self,
         api_endpoint: str,
-        **request_opts,
-    ) -> Response:
-        return self.request(
+        **req_opts,
+    ):
+        return self.__request(
             "GET",
             api_endpoint,
-            **request_opts,
+            **req_opts,
         )
 
     def post(
         self,
         api_endpoint: str,
-        **request_opts,
-    ) -> Response:
-        return self.request(
+        **req_opts,
+    ):
+        return self.__request(
             "POST",
             api_endpoint,
-            **request_opts,
+            **req_opts,
         )
 
     def patch(
         self,
         api_endpoint: str,
-        **request_opts,
-    ) -> Response:
-        return self.request(
+        **req_opts,
+    ):
+        return self.__request(
             "PATCH",
             api_endpoint,
-            **request_opts,
+            **req_opts,
         )
 
     def put(
         self,
         api_endpoint: str,
-        **request_opts,
-    ) -> Response:
-        return self.request(
+        **req_opts,
+    ):
+        return self.__request(
             "PUT",
             api_endpoint,
-            **request_opts,
+            **req_opts,
+        )
+
+    def options(
+        self,
+        api_endpoint: str,
+        **req_opts,
+    ):
+        return self.__request(
+            "OPTIONS",
+            api_endpoint,
+            **req_opts,
+        )
+
+    def head(
+        self,
+        api_endpoint: str,
+        **req_opts,
+    ):
+        return self.__request(
+            "HEAD",
+            api_endpoint,
+            **req_opts,
         )
 
     def delete(
         self,
         api_endpoint: str,
-        **request_opts,
-    ) -> Response:
-        return self.request(
+        **req_opts,
+    ):
+        return self.__request(
             "DELETE",
             api_endpoint,
-            **request_opts,
+            **req_opts,
+        )
+
+    @classmethod
+    def password_grant(
+        cls,
+        session: Session,
+        client_id: str,
+        client_secret: str,
+        username: str,
+        password: str,
+        two_factor_code: str | None = None,
+        user_agent: str = f"{__package__}/{__version__}",
+    ):
+        return cls(
+            client_id,
+            client_secret,
+            OAuth2Credential.password_grant(
+                session,
+                client_id,
+                client_secret,
+                username,
+                password,
+                two_factor_code=two_factor_code,
+            ),
+            user_agent=user_agent,
+        )
+
+    @classmethod
+    def client_credential_grant(
+        cls,
+        session: Session,
+        client_id: str,
+        client_secret: str,
+        user_agent: str = f"{__package__}/{__version__}",
+    ):
+        return cls(
+            client_id,
+            client_secret,
+            OAuth2Credential.client_credential_grant(
+                session,
+                client_id,
+                client_secret,
+            ),
+            user_agent=user_agent,
+        )
+
+    @classmethod
+    def installed_client_grant(
+        cls,
+        session: Session,
+        client_id: str,
+        client_secret: str,
+        device_id: str = "".join([
+            SystemRandom().choice(ascii_letters + digits)
+            for _ in range(30)
+        ]),
+        user_agent: str = f"{__package__}/{__version__}",
+    ):
+        return cls(
+            client_id,
+            client_secret,
+            OAuth2Credential.installed_client_grant(
+                session,
+                client_id,
+                client_secret,
+                device_id=device_id,
+            ),
+            user_agent=user_agent,
+        )
+
+    @classmethod
+    def authorization_code_grant(
+        cls,
+        session: Session,
+        client_id: str,
+        client_secret: str,
+        authcode: str,
+        callback_url: str,
+        user_agent: str = f"{__package__}/{__version__}",
+    ):
+        return cls(
+            client_id,
+            client_secret,
+            OAuth2Credential.authorization_code_grant(
+                session,
+                client_id,
+                client_secret,
+                authcode,
+                callback_url,
+            ),
+            user_agent=user_agent,
+        )
+
+    @classmethod
+    def localserver_code_flow(
+        cls,
+        session: Session,
+        client_id: str,
+        client_secret: str,
+        callback_url: str,
+        duration: str,
+        scopes: List[str],
+        state: str,
+        user_agent: str = f"{__package__}/{__version__}",
+    ):
+        return cls(
+            client_id,
+            client_secret,
+            OAuth2Credential.localserver_code_flow(
+                session,
+                client_id,
+                client_secret,
+                callback_url,
+                duration,
+                scopes,
+                state,
+            ),
+            user_agent=user_agent,
         )
