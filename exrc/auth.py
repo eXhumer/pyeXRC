@@ -29,10 +29,7 @@ from requests import Session
 from requests.auth import HTTPBasicAuth
 
 from . import __version__
-from .exception import (
-    OAuth2Exception,
-    ResponseException,
-)
+from .exception import OAuth2Exception, ResponseException
 from .utils import NoLoggingWSGIRequestHandler
 
 
