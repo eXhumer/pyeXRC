@@ -8,5 +8,15 @@ Reddit OAuth2 client to access Reddit resources via [OAuth2](https://github.com/
 * Provides methods to refresh/revoke OAuth2 credentials.
 * Provides methods to save/load OAuth2 credential from token file.
 
+## Package Installation Guide
+### Requires
+* Python 3.9+
+* pip package manager
+
+### Install from source
+```console
+pip install . --use-feature=in-tree-build
+```
+
 ## Licensing
 This project is licensed under OSI Approved [GNU GPLv3 **ONLY**](https://github.com/eXhumer/eXRC/blob/main/LICENSE.md).
