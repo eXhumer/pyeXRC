@@ -252,40 +252,32 @@ class OAuth2Credential:
         return f"{self.__token_type} {self.__access_token}"
 
     def revoke(self, session: Session, client_id: str, client_secret: str):
-        data = urlencode({
-            "token": self.__access_token,
-            "token_type_hint": "access_token",
-        })
-
         res = session.post(
             "/".join((
                 OAuth2Credential.auth_base_url,
                 OAuth2Credential.revoke_endpoint,
             )),
-            data=data,
+            data={
+                "token": self.__access_token,
+                "token_type_hint": "access_token",
+            },
             headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Content-Length": f"{len(data)}",
                 "User-Agent": f"{__package__}/{__version__}",
             },
             auth=HTTPBasicAuth(client_id, client_secret),
         )
 
         if self.__refresh_token is not None:
-            data = urlencode({
-                "token": self.__refresh_token,
-                "token_type_hint": "refresh_token",
-            })
-
             res = session.post(
                 "/".join((
                     OAuth2Credential.auth_base_url,
                     OAuth2Credential.revoke_endpoint,
                 )),
-                data=data,
+                data={
+                    "token": self.__refresh_token,
+                    "token_type_hint": "refresh_token",
+                },
                 headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Content-Length": f"{len(data)}",
                     "User-Agent": f"{__package__}/{__version__}",
                 },
                 auth=HTTPBasicAuth(client_id, client_secret),
@@ -298,20 +290,16 @@ class OAuth2Credential:
             raise OAuth2Exception("Attempting to refresh credential without" +
                                   " refresh token!")
 
-        data = urlencode({
-            "grant_type": "refresh_token",
-            "refresh_token": self.__refresh_token,
-        })
-
         res = session.post(
             "/".join((
                 OAuth2Credential.auth_base_url,
                 OAuth2Credential.access_endpoint,
             )),
-            data=data,
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": self.__refresh_token,
+            },
             headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Content-Length": f"{len(data)}",
                 "User-Agent": f"{__package__}/{__version__}",
             },
             auth=HTTPBasicAuth(client_id, client_secret),
@@ -398,23 +386,17 @@ class OAuth2Credential:
 
             password = f"{password}:{two_factor_code}"
 
-        data = urlencode(
-            {
-                "grant_type": "password",
-                "username": username,
-                "password": password,
-            }
-        )
-
         res = session.post(
             "/".join((
                 OAuth2Credential.auth_base_url,
                 OAuth2Credential.access_endpoint,
             )),
-            data=data,
+            data={
+                "grant_type": "password",
+                "username": username,
+                "password": password,
+            },
             headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Content-Length": f"{len(data)}",
                 "User-Agent": f"{__package__}/{__version__}",
             },
             auth=HTTPBasicAuth(client_id, client_secret),
@@ -443,17 +425,13 @@ class OAuth2Credential:
         client_id: str,
         client_secret: str,
     ):
-        data = urlencode({"grant_type": "client_credentials"})
-
         res = session.post(
             "/".join((
                 OAuth2Credential.auth_base_url,
                 OAuth2Credential.access_endpoint,
             )),
-            data=data,
+            data={"grant_type": "client_credentials"},
             headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Content-Length": f"{len(data)}",
                 "User-Agent": f"{__package__}/{__version__}",
             },
             auth=HTTPBasicAuth(client_id, client_secret),
@@ -486,23 +464,17 @@ class OAuth2Credential:
             for _ in range(30)
         ]),
     ):
-        data = urlencode(
-            {
-                "grant_type": "https://oauth.reddit.com/grants/" +
-                "installed_client",
-                "device_id": device_id,
-            }
-        )
-
         res = session.post(
             "/".join((
                 OAuth2Credential.auth_base_url,
                 OAuth2Credential.access_endpoint,
             )),
-            data=data,
+            data={
+                "grant_type": "https://oauth.reddit.com/grants/" +
+                "installed_client",
+                "device_id": device_id,
+            },
             headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Content-Length": f"{len(data)}",
                 "User-Agent": f"{__package__}/{__version__}",
             },
             auth=HTTPBasicAuth(client_id, client_secret),
@@ -536,21 +508,17 @@ class OAuth2Credential:
         authcode: str,
         callback_url: str,
     ):
-        data = urlencode({
-            "code": authcode,
-            "grant_type": "authorization_code",
-            "redirect_uri": callback_url,
-        })
-
         res = session.post(
             "/".join((
                 OAuth2Credential.auth_base_url,
                 OAuth2Credential.access_endpoint,
             )),
-            data=data,
+            data={
+                "code": authcode,
+                "grant_type": "authorization_code",
+                "redirect_uri": callback_url,
+            },
             headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Content-Length": f"{len(data)}",
                 "User-Agent": f"{__package__}/{__version__}",
             },
             auth=HTTPBasicAuth(client_id, client_secret),
