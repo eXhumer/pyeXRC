@@ -190,6 +190,24 @@ class OAuth2Client:
             **req_opts,
         )
 
+    @property
+    def credential(self):
+        return self.__credential
+
+    def revoke(self):
+        return self.__credential.revoke(
+            self.__session,
+            self.__client_id,
+            self.__client_secret,
+        )
+
+    def refresh(self):
+        return self.__credential.refresh(
+            self.__session,
+            self.__client_id,
+            self.__client_secret,
+        )
+
     @classmethod
     def password_grant(
         cls,
