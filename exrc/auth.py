@@ -372,12 +372,12 @@ class OAuth2Credential:
     @classmethod
     def password_grant(
         cls,
-        session: Session,
         client_id: str,
         client_secret: str,
         username: str,
         password: str,
         two_factor_code: str | None = None,
+        session: Session | None = None,
     ):
         if two_factor_code is not None:
             if len(two_factor_code) == 6 and two_factor_code.isnumeric():
@@ -385,6 +385,9 @@ class OAuth2Credential:
                                  " 6 and must be numeric!")
 
             password = f"{password}:{two_factor_code}"
+
+        if session is None:
+            session = Session()
 
         res = session.post(
             "/".join((
@@ -421,10 +424,13 @@ class OAuth2Credential:
     @classmethod
     def client_credential_grant(
         cls,
-        session: Session,
         client_id: str,
         client_secret: str,
+        session: Session | None = None,
     ):
+        if session is None:
+            session = Session()
+
         res = session.post(
             "/".join((
                 OAuth2Credential.auth_base_url,
@@ -456,14 +462,17 @@ class OAuth2Credential:
     @classmethod
     def installed_client_grant(
         cls,
-        session: Session,
         client_id: str,
         client_secret: str,
         device_id: str = "".join([
             SystemRandom().choice(ascii_letters + digits)
             for _ in range(30)
         ]),
+        session: Session | None = None,
     ):
+        if session is None:
+            session = Session()
+
         res = session.post(
             "/".join((
                 OAuth2Credential.auth_base_url,
@@ -502,12 +511,15 @@ class OAuth2Credential:
     @classmethod
     def authorization_code_grant(
         cls,
-        session: Session,
         client_id: str,
         client_secret: str,
         authcode: str,
         callback_url: str,
+        session: Session | None = None,
     ):
+        if session is None:
+            session = Session()
+
         res = session.post(
             "/".join((
                 OAuth2Credential.auth_base_url,
@@ -552,13 +564,13 @@ class OAuth2Credential:
     @classmethod
     def localserver_code_flow(
         cls,
-        session: Session,
         client_id: str,
         client_secret: str,
         callback_url: str,
         duration: str,
         scopes: List[str],
         state: str,
+        session: Session | None = None,
     ):
         netloc = urlparse(callback_url).netloc
         netloc_parts = netloc.split(":", maxsplit=1)
@@ -582,10 +594,13 @@ class OAuth2Credential:
         while wsgi_app.authcode is None:
             wsgi_server.handle_request()
 
+        if session is None:
+            session = Session()
+
         return cls.authorization_code_grant(
-            session,
             client_id,
             client_secret,
             wsgi_app.authcode,
             callback_url,
+            session=session,
         )

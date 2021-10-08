@@ -39,8 +39,12 @@ class OAuth2Client:
         client_id: str,
         client_secret: str,
         credential: OAuth2Credential,
+        session: Session | None = None,
         user_agent: str = f"{__package__}/{__version__}",
     ):
+        if session is None:
+            session = Session()
+
         self.__client_id = client_id
         self.__client_secret = client_secret
         self.__session = Session()
@@ -211,14 +215,17 @@ class OAuth2Client:
     @classmethod
     def password_grant(
         cls,
-        session: Session,
         client_id: str,
         client_secret: str,
         username: str,
         password: str,
+        session: Session | None = None,
         two_factor_code: str | None = None,
         user_agent: str = f"{__package__}/{__version__}",
     ):
+        if session is None:
+            session = Session()
+
         return cls(
             client_id,
             client_secret,
@@ -229,99 +236,117 @@ class OAuth2Client:
                 username,
                 password,
                 two_factor_code=two_factor_code,
+                session=session,
             ),
+            session=session,
             user_agent=user_agent,
         )
 
     @classmethod
     def client_credential_grant(
         cls,
-        session: Session,
         client_id: str,
         client_secret: str,
+        session: Session | None = None,
         user_agent: str = f"{__package__}/{__version__}",
     ):
+        if session is None:
+            session = Session()
+
         return cls(
             client_id,
             client_secret,
             OAuth2Credential.client_credential_grant(
-                session,
                 client_id,
                 client_secret,
+                session=session,
             ),
+            session=session,
             user_agent=user_agent,
         )
 
     @classmethod
     def installed_client_grant(
         cls,
-        session: Session,
         client_id: str,
         client_secret: str,
         device_id: str = "".join([
             SystemRandom().choice(ascii_letters + digits)
             for _ in range(30)
         ]),
+        session: Session | None = None,
         user_agent: str = f"{__package__}/{__version__}",
     ):
+        if session is None:
+            session = Session()
+
         return cls(
             client_id,
             client_secret,
             OAuth2Credential.installed_client_grant(
-                session,
                 client_id,
                 client_secret,
                 device_id=device_id,
+                session=session,
             ),
+            session=session,
             user_agent=user_agent,
         )
 
     @classmethod
     def authorization_code_grant(
         cls,
-        session: Session,
         client_id: str,
         client_secret: str,
         authcode: str,
         callback_url: str,
+        session: Session | None = None,
         user_agent: str = f"{__package__}/{__version__}",
     ):
+        if session is None:
+            session = Session()
+
         return cls(
             client_id,
             client_secret,
             OAuth2Credential.authorization_code_grant(
-                session,
                 client_id,
                 client_secret,
                 authcode,
                 callback_url,
+                session=session,
             ),
+            session=session,
             user_agent=user_agent,
         )
 
     @classmethod
     def localserver_code_flow(
         cls,
-        session: Session,
         client_id: str,
         client_secret: str,
         callback_url: str,
         duration: str,
         scopes: List[str],
         state: str,
+        session: Session | None = None,
         user_agent: str = f"{__package__}/{__version__}",
     ):
+        if session is None:
+            session = Session()
+
         return cls(
             client_id,
             client_secret,
             OAuth2Credential.localserver_code_flow(
-                session,
                 client_id,
                 client_secret,
                 callback_url,
                 duration,
                 scopes,
                 state,
+                session=session,
             ),
+            session=session,
             user_agent=user_agent,
         )
