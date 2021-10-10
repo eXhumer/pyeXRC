@@ -328,7 +328,7 @@ class OAuth2Client:
         callback_url: str,
         duration: str,
         scopes: List[str],
-        state: str,
+        state: str | None = None,
         session: Session | None = None,
         user_agent: str = f"{__package__}/{__version__}",
     ):
@@ -344,7 +344,7 @@ class OAuth2Client:
                 callback_url,
                 duration,
                 scopes,
-                state,
+                state=state,
                 session=session,
             ),
             session=session,

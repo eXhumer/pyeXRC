@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime as html_date_parser
 from json import dump as json_dump, load as json_load
 from pathlib import Path
-from random import SystemRandom
+from random import SystemRandom, choice
 from string import ascii_letters, digits
 from typing import List, Dict, Tuple, Callable
 from urllib.parse import urlencode, urlparse, parse_qs
@@ -39,8 +39,8 @@ class OAuth2WSGICodeFlowExchangeApp:
         client_id: str,
         callback_url: str,
         scopes: List[str],
-        state: str,
         duration: str,
+        state: str | None = None,
     ):
         if not callback_url.startswith((
             "http://localhost",
@@ -50,6 +50,12 @@ class OAuth2WSGICodeFlowExchangeApp:
 
         if duration not in ("temporary", "permanent"):
             raise ValueError("Invalid duration!")
+
+        if state is None:
+            state = "".join([
+                choice(ascii_letters + digits)
+                for _ in range(30)
+            ])
 
         self.__authcode: str | None = None
         self.__client_id: str = client_id
@@ -569,7 +575,7 @@ class OAuth2Credential:
         callback_url: str,
         duration: str,
         scopes: List[str],
-        state: str,
+        state: str | None = None,
         session: Session | None = None,
     ):
         netloc = urlparse(callback_url).netloc
@@ -580,8 +586,8 @@ class OAuth2Credential:
             client_id,
             callback_url,
             scopes,
-            state,
             duration,
+            state=state,
         )
         wsgi_server = make_server(
             host,
