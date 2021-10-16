@@ -20,6 +20,7 @@ from string import ascii_letters, digits
 from typing import List
 
 from requests import Session
+from requests.utils import default_user_agent
 
 from . import __version__
 from .auth import OAuth2Credential
@@ -45,10 +46,12 @@ class OAuth2Client:
         if session is None:
             session = Session()
 
+        if session.headers["User-Agent"] == default_user_agent:
+            session.headers["User-Agent"] = user_agent
+
         self.__client_id = client_id
         self.__client_secret = client_secret
-        self.__session = Session()
-        self.__session.headers["User-Agent"] = user_agent
+        self.__session = session
         self.__credential = credential
 
     @staticmethod
@@ -226,6 +229,9 @@ class OAuth2Client:
         if session is None:
             session = Session()
 
+        if session.headers["User-Agent"] == default_user_agent:
+            session.headers["User-Agent"] = user_agent
+
         return cls(
             client_id,
             client_secret,
@@ -252,6 +258,9 @@ class OAuth2Client:
     ):
         if session is None:
             session = Session()
+
+        if session.headers["User-Agent"] == default_user_agent:
+            session.headers["User-Agent"] = user_agent
 
         return cls(
             client_id,
@@ -280,6 +289,9 @@ class OAuth2Client:
         if session is None:
             session = Session()
 
+        if session.headers["User-Agent"] == default_user_agent:
+            session.headers["User-Agent"] = user_agent
+
         return cls(
             client_id,
             client_secret,
@@ -305,6 +317,9 @@ class OAuth2Client:
     ):
         if session is None:
             session = Session()
+
+        if session.headers["User-Agent"] == default_user_agent:
+            session.headers["User-Agent"] = user_agent
 
         return cls(
             client_id,
@@ -334,6 +349,9 @@ class OAuth2Client:
     ):
         if session is None:
             session = Session()
+
+        if session.headers["User-Agent"] == default_user_agent:
+            session.headers["User-Agent"] = user_agent
 
         return cls(
             client_id,
