@@ -107,13 +107,16 @@ class OAuth2Client:
             **req_opts,
         )
 
-        OAuth2Client.__ratelimit_status["remaining"] = \
-            float(res.headers["X-RateLimit-Remaining"])
-        OAuth2Client.__ratelimit_status["reset"] = \
-            datetime.now(tz=timezone.utc) + \
-            timedelta(seconds=int(res.headers["X-RateLimit-Reset"]))
-        OAuth2Client.__ratelimit_status["used"] = \
-            res.headers["X-RateLimit-Used"]
+        if "X-RateLimit-Remaining" in res.headers:
+            OAuth2Client.__ratelimit_status["remaining"] = \
+                float(res.headers["X-RateLimit-Remaining"])
+        if "X-RateLimit-Reset" in res.headers:
+            OAuth2Client.__ratelimit_status["reset"] = \
+                datetime.now(tz=timezone.utc) + \
+                timedelta(seconds=int(res.headers["X-RateLimit-Reset"]))
+        if "X-RateLimit-Used" in res.headers:
+            OAuth2Client.__ratelimit_status["used"] = \
+                res.headers["X-RateLimit-Used"]
 
         if OAuth2Client.__ratelimit_status["remaining"] == 0:
             raise RateLimitException(OAuth2Client.__ratelimit_status["reset"])
@@ -368,3 +371,131 @@ class OAuth2Client:
             session=session,
             user_agent=user_agent,
         )
+
+    def comment(self, text: str, thing_id: str):
+        return self.post(
+            "api/comment",
+            data={
+                "api_type": "json",
+                "return_rtjson": False,  # richtext not supported
+                "text": text,
+                "thing_id": thing_id,
+            },
+        )
+
+    def needs_captcha(self):
+        return self.get("api/needs_captcha")
+
+    def username_available(self, user: str):
+        return self.get("api/username_available", params={"user": user})
+
+    def scopes(self, scopes: str | None):
+        params = {}
+
+        if scopes is not None:
+            params.update({"scopes": scopes})
+
+        return self.get("api/v1/scopes", params=params)
+
+    def block_user(self, account_id: str, name: str):
+        return self.post(
+            "api/block_user",
+            data={
+                "api_type": "json",
+                "name": name,
+                "account_id": account_id,
+            }
+        )
+
+    def update_me_prefs(self, **new_me_prefs):
+        return self.patch("api/v1/me/prefs", json=new_me_prefs)
+
+    def gold_gild(self, thing_id: str):
+        return self.post(f"api/v1/gold/gild/{thing_id}")
+
+    def gold_give(self, months: int, username: str):
+        return self.post(
+            f"api/v1/gold/give/{username}",
+            data={"months": months},
+        )
+
+    def delete_thing(self, id: str):
+        return self.post("api/del", data={"id": id})
+
+    def editusertext(self, text: str, thing_id: str):
+        return self.post(
+            "api/editusertext",
+            data={
+                "api_type": "json",
+                "return_rtjson": False,  # richtext not supported
+                "text": text,
+                "thing_id": thing_id,
+            })
+
+    def sendreplies(self, thing_id: str, state: bool):
+        return self.post(
+            "api/sendreplies",
+            data={
+                "id": thing_id,
+                "state": state,
+            }
+        )
+
+    def link_flair(self, subreddit: str | None = None):
+        uri = "api/link_flair"
+
+        if subreddit is not None:
+            uri = f"r/{subreddit}/{uri}"
+
+        return self.get(uri)
+
+    def link_flair_v2(self, subreddit: str | None = None):
+        uri = "api/link_flair_v2"
+
+        if subreddit is not None:
+            uri = f"r/{subreddit}/{uri}"
+
+        return self.get(uri)
+
+    def setflairenabled(
+        self,
+        flair_enabled: bool,
+        subreddit: str | None = None,
+    ):
+        uri = "api/selectflair"
+
+        if subreddit is not None:
+            uri = f"r/{subreddit}/{uri}"
+
+        return self.post(
+            uri,
+            data={
+                "api_type": "json",
+                "flair_enabled": flair_enabled,
+            },
+        )
+
+    def user_flair(self, subreddit: str | None = None):
+        uri = "api/user_flair"
+
+        if subreddit is not None:
+            uri = f"r/{subreddit}/{uri}"
+
+        return self.get(uri)
+
+    def user_flair_v2(self, subreddit: str | None = None):
+        uri = "api/user_flair_v2"
+
+        if subreddit is not None:
+            uri = f"r/{subreddit}/{uri}"
+
+        return self.get(uri)
+
+    def me(self):
+        return self.get("api/v1/me")
+
+    def get_me_prefs(self, *fields: str):
+        return self.get("api/v1/me/prefs", params={"fields": fields})
+
+    def me_throphies(self):
+        return self.get("api/v1/me/trophies")
