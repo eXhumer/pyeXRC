@@ -516,12 +516,16 @@ class OAuth2Client:
         flair_id: str | None = None,
         flair_text: str | None = None,
         resubmit: bool = True,
-        send_replies: bool = True,
+        send_replies: bool = False,
         nsfw: bool = False,
         spoiler: bool = False,
         validate_on_submit: bool = True,
         collection_id: str | None = None,
         discussion_type: str | None = None,
+        event_end: str | None = None,
+        event_start: str | None = None,
+        event_tz: str | None = None,
+        g_recaptcha_response: str | None = None,
     ):
         if subreddit is None:
             res = self.me()
@@ -550,8 +554,111 @@ class OAuth2Client:
             ("flair_text", flair_text),
             ("collection_id", collection_id),
             ("discussion_type", discussion_type),
+            ("event_end", event_end),
+            ("event_start", event_start),
+            ("event_tz", event_tz),
+            ("g-recaptcha-response", g_recaptcha_response),
         ):
             if value is not None:
                 data[key] = value
 
         return self.post("api/submit_poll_post", json=data)
+
+    def __submit(
+        self,
+        kind: str,
+        title: str,
+        text: str | None = None,
+        url: str | None = None,
+        video_poster_url: str | None = None,
+        nsfw: bool = False,
+        resubmit: bool = True,
+        send_replies: bool = False,
+        spoiler: bool = False,
+        subreddit: str | None = None,
+        collection_id: str | None = None,
+        flair_id: str | None = None,
+        flair_text: str | None = None,
+        discussion_type: str | None = None,
+        event_end: str | None = None,
+        event_start: str | None = None,
+        event_tz: str | None = None,
+        g_recaptcha_response: str | None = None,
+    ):
+        if subreddit is None:
+            res = self.me()
+
+            if res.status_code != 200:
+                return res
+
+            me_name = res.json()["name"]
+            subreddit = f"u_{me_name}"
+
+        data = {
+            "api_type": "json",
+            "nsfw": nsfw,
+            "resubmit": resubmit,
+            "sendreplies": send_replies,
+            "spoiler": spoiler,
+            "sr": subreddit,
+            "title": title,
+            "kind": kind,
+        }
+
+        for key, value in (
+            ("flair_id", flair_id),
+            ("flair_text", flair_text),
+            ("collection_id", collection_id),
+            ("discussion_type", discussion_type),
+            ("event_end", event_end),
+            ("event_start", event_start),
+            ("event_tz", event_tz),
+            ("g-recaptcha-response", g_recaptcha_response),
+            ("video_poster_url", video_poster_url),
+            ("text", text),
+            ("url", url),
+        ):
+            if value is not None:
+                data[key] = value
+
+        return self.post(
+            "api/submit",
+            data=data,
+        )
+
+    def submit_text(
+        self,
+        title: str,
+        text: str,
+        nsfw: bool = False,
+        resubmit: bool = True,
+        send_replies: bool = False,
+        spoiler: bool = False,
+        subreddit: str | None = None,
+        collection_id: str | None = None,
+        flair_id: str | None = None,
+        flair_text: str | None = None,
+        discussion_type: str | None = None,
+        event_end: str | None = None,
+        event_start: str | None = None,
+        event_tz: str | None = None,
+        g_recaptcha_response: str | None = None,
+    ):
+        return self.__submit(
+            "self",
+            title,
+            text=text,
+            nsfw=nsfw,
+            resubmit=resubmit,
+            send_replies=send_replies,
+            spoiler=spoiler,
+            subreddit=subreddit,
+            collection_id=collection_id,
+            flair_id=flair_id,
+            flair_text=flair_text,
+            discussion_type=discussion_type,
+            event_end=event_end,
+            event_start=event_start,
+            event_tz=event_tz,
+            g_recaptcha_response=g_recaptcha_response,
+        )
