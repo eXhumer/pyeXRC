@@ -668,7 +668,6 @@ class OAuth2Client:
         if convert_to_richtext is True:
             res = self.__convert_rte_body(text)
             rt_json = dumps(res.json()["output"])
-            print(rt_json)
             text = None
 
         return self.__submit(
