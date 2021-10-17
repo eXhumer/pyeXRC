@@ -505,3 +505,53 @@ class OAuth2Client:
 
     def me_throphies(self):
         return self.get("api/v1/me/trophies")
+
+    def submit_poll(
+        self,
+        title: str,
+        selftext: str,
+        options: List[str],
+        duration: int,
+        subreddit: str | None = None,
+        flair_id: str | None = None,
+        flair_text: str | None = None,
+        resubmit: bool = True,
+        send_replies: bool = True,
+        nsfw: bool = False,
+        spoiler: bool = False,
+        validate_on_submit: bool = True,
+        collection_id: str | None = None,
+        discussion_type: str | None = None,
+    ):
+        if subreddit is None:
+            res = self.me()
+
+            if res.status_code != 200:
+                return res
+
+            me_name = res.json()["name"]
+            subreddit = f"u_{me_name}"
+
+        data = {
+            "sr": subreddit,
+            "text": selftext,
+            "options": options,
+            "duration": duration,
+            "resubmit": resubmit,
+            "sendreplies": send_replies,
+            "title": title,
+            "nsfw": nsfw,
+            "spoiler": spoiler,
+            "validate_on_submit": validate_on_submit,
+        }
+
+        for key, value in (
+            ("flair_id", flair_id),
+            ("flair_text", flair_text),
+            ("collection_id", collection_id),
+            ("discussion_type", discussion_type),
+        ):
+            if value is not None:
+                data[key] = value
+
+        return self.post("api/submit_poll_post", json=data)
