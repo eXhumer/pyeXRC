@@ -1,5 +1,5 @@
 # eXRC
-Reddit OAuth2 client to access Reddit resources via [OAuth2](https://github.com/reddit-archive/reddit/wiki/OAuth2), powered by [requests](https://pypi.org/project/requests/). 
+Reddit OAuth2 client to access Reddit resources via [OAuth2](https://github.com/reddit-archive/reddit/wiki/OAuth2), powered by [requests](https://pypi.org/project/requests/), [requests-toolbelt](https://pypi.org/project/requests-toolbelt/) & [websocket-client](https://pypi.org/project/websocket-client/). 
 
 ## Client Features
 * Supports all forms of OAuth2 flows/grants supported by Reddit.
@@ -15,7 +15,7 @@ Reddit OAuth2 client to access Reddit resources via [OAuth2](https://github.com/
 
 ### Install from source
 ```console
-pip install . --use-feature=in-tree-build
+pip install .
 ```
 
 ## Licensing
