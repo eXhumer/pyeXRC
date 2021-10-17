@@ -15,16 +15,25 @@
 
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
+from json import dumps, loads
+from mimetypes import guess_type
+from pathlib import Path
 from random import SystemRandom
 from string import ascii_letters, digits
-from typing import List
+from typing import Any, Dict, List
 
 from requests import Session
 from requests.utils import default_user_agent
+from requests_toolbelt import MultipartEncoder
+from websocket import create_connection
 
 from . import __version__
 from .auth import OAuth2Credential
-from .exception import RateLimitException
+from .exception import (
+    MediaUploadException,
+    RateLimitException,
+    ResponseException,
+)
 
 
 class OAuth2Client:
@@ -501,7 +510,12 @@ class OAuth2Client:
         return self.get("api/v1/me")
 
     def get_me_prefs(self, *fields: str):
-        return self.get("api/v1/me/prefs", params={"fields": fields})
+        params = None
+
+        if len(fields) > 0:
+            params = {"fields": fields}
+
+        return self.get("api/v1/me/prefs", params=params)
 
     def me_throphies(self):
         return self.get("api/v1/me/trophies")
@@ -576,6 +590,7 @@ class OAuth2Client:
         send_replies: bool = False,
         spoiler: bool = False,
         subreddit: str | None = None,
+        validate_on_submit: bool = True,
         collection_id: str | None = None,
         flair_id: str | None = None,
         flair_text: str | None = None,
@@ -584,6 +599,7 @@ class OAuth2Client:
         event_start: str | None = None,
         event_tz: str | None = None,
         g_recaptcha_response: str | None = None,
+        richtext_json: Dict[str, Any] | None = None,
     ):
         if subreddit is None:
             res = self.me()
@@ -603,6 +619,7 @@ class OAuth2Client:
             "sr": subreddit,
             "title": title,
             "kind": kind,
+            "validate_on_submit": validate_on_submit,
         }
 
         for key, value in (
@@ -617,6 +634,7 @@ class OAuth2Client:
             ("video_poster_url", video_poster_url),
             ("text", text),
             ("url", url),
+            ("richtext_json", richtext_json),
         ):
             if value is not None:
                 data[key] = value
@@ -643,7 +661,16 @@ class OAuth2Client:
         event_start: str | None = None,
         event_tz: str | None = None,
         g_recaptcha_response: str | None = None,
+        convert_to_richtext: bool = False,
     ):
+        rt_json = None
+
+        if convert_to_richtext is True:
+            res = self.__convert_rte_body(text)
+            rt_json = dumps(res.json()["output"])
+            print(rt_json)
+            text = None
+
         return self.__submit(
             "self",
             title,
@@ -661,4 +688,282 @@ class OAuth2Client:
             event_start=event_start,
             event_tz=event_tz,
             g_recaptcha_response=g_recaptcha_response,
+            richtext_json=rt_json,
+        )
+
+    def __upload_media(
+        self,
+        media_path: Path,
+        upload_type: str = "link",
+    ):
+        mimetype = guess_type(media_path.name)[0]
+
+        res = self.post(
+            "api/media/asset",
+            data={
+                "filepath": media_path.name,
+                "mimetype": guess_type(media_path.name)[0],
+            },
+        )
+
+        if res.status_code != 200:
+            raise ResponseException(
+                res,
+                "ERROR: Invalid status code while requesting media lease!",
+            )
+
+        action: str = res.json()["args"]["action"]
+        fields: Dict[str, Any] = {
+            item["name"]: item["value"]
+            for item
+            in res.json()["args"]["fields"]
+        }
+        websocket_url: str = res.json()["asset"]["websocket_url"]
+        asset_id: str = res.json()["asset"]["asset_id"]
+
+        fields.update({
+            "file": (
+                media_path.name,
+                media_path.open(mode="rb"),
+                mimetype,
+            )
+        })
+
+        mp_data = MultipartEncoder(fields=fields)
+
+        res = self.__session.post(
+            f"https:{action}",
+            data=mp_data,
+            headers={"Content-Type": mp_data.content_type},
+        )
+
+        if res.status_code != 201:
+            raise ResponseException(
+                res,
+                "ERROR: Invalid status code while uploading media!",
+            )
+
+        return (
+            f"https:{action}/{fields['key']}"
+            if upload_type == "link"
+            else asset_id
+        ), websocket_url
+
+    def __submit_media(
+        self,
+        kind: str,
+        title: str,
+        media_path: Path,
+        nsfw: bool = False,
+        resubmit: bool = True,
+        send_replies: bool = False,
+        spoiler: bool = False,
+        validate_on_submit: bool = True,
+        subreddit: str | None = None,
+        collection_id: str | None = None,
+        flair_id: str | None = None,
+        flair_text: str | None = None,
+        discussion_type: str | None = None,
+        event_end: str | None = None,
+        event_start: str | None = None,
+        event_tz: str | None = None,
+        video_poster_url: str | None = None,
+        g_recaptcha_response: str | None = None,
+    ):
+        if kind not in ["image", "video", "videogif"]:
+            raise ValueError("Invalid media kind!")
+
+        media_url, ws_url = self.__upload_media(media_path)
+
+        self.__submit(
+            kind,
+            title,
+            url=media_url,
+            nsfw=nsfw,
+            resubmit=resubmit,
+            send_replies=send_replies,
+            spoiler=spoiler,
+            validate_on_submit=validate_on_submit,
+            subreddit=subreddit,
+            collection_id=collection_id,
+            flair_id=flair_id,
+            flair_text=flair_text,
+            discussion_type=discussion_type,
+            event_end=event_end,
+            event_start=event_start,
+            event_tz=event_tz,
+            video_poster_url=video_poster_url,
+            g_recaptcha_response=g_recaptcha_response,
+        )
+
+        ws_conn = create_connection(ws_url)
+        ws_update = loads(ws_conn.recv())
+        ws_conn.close()
+
+        if ws_update["type"] == "failed":
+            raise MediaUploadException
+
+        return ws_update
+
+    def submit_image(
+        self,
+        title: str,
+        image_path: Path,
+        nsfw: bool = False,
+        resubmit: bool = True,
+        send_replies: bool = False,
+        spoiler: bool = False,
+        validate_on_submit: bool = True,
+        subreddit: str | None = None,
+        collection_id: str | None = None,
+        flair_id: str | None = None,
+        flair_text: str | None = None,
+        discussion_type: str | None = None,
+        event_end: str | None = None,
+        event_start: str | None = None,
+        event_tz: str | None = None,
+        g_recaptcha_response: str | None = None,
+    ):
+        return self.__submit_media(
+            "image",
+            title,
+            image_path,
+            nsfw=nsfw,
+            resubmit=resubmit,
+            send_replies=send_replies,
+            spoiler=spoiler,
+            validate_on_submit=validate_on_submit,
+            subreddit=subreddit,
+            collection_id=collection_id,
+            flair_id=flair_id,
+            flair_text=flair_text,
+            discussion_type=discussion_type,
+            event_end=event_end,
+            event_start=event_start,
+            event_tz=event_tz,
+            g_recaptcha_response=g_recaptcha_response,
+        )
+
+    def submit_video(
+        self,
+        title: str,
+        video_path: Path,
+        videogif: bool = False,
+        thumbnail_image_path: Path | None = None,
+        nsfw: bool = False,
+        resubmit: bool = True,
+        send_replies: bool = False,
+        spoiler: bool = False,
+        validate_on_submit: bool = True,
+        subreddit: str | None = None,
+        collection_id: str | None = None,
+        flair_id: str | None = None,
+        flair_text: str | None = None,
+        discussion_type: str | None = None,
+        event_end: str | None = None,
+        event_start: str | None = None,
+        event_tz: str | None = None,
+        g_recaptcha_response: str | None = None,
+    ):
+        return self.__submit_media(
+            "videogif" if videogif else "video",
+            title,
+            video_path,
+            nsfw=nsfw,
+            resubmit=resubmit,
+            send_replies=send_replies,
+            spoiler=spoiler,
+            validate_on_submit=validate_on_submit,
+            subreddit=subreddit,
+            collection_id=collection_id,
+            flair_id=flair_id,
+            flair_text=flair_text,
+            discussion_type=discussion_type,
+            event_end=event_end,
+            event_start=event_start,
+            event_tz=event_tz,
+            video_poster_url=(
+                self.__upload_media(thumbnail_image_path)[0]
+                if thumbnail_image_path is not None
+                else None
+            ),
+            g_recaptcha_response=g_recaptcha_response,
+        )
+
+    def upload_inline_media(self, media_path: Path):
+        return self.__upload_media(media_path, upload_type="selfpost")[0]
+
+    def submit_gallery(
+        self,
+        title: str,
+        images: Dict[Path, Dict[str, str]],
+        nsfw: bool = False,
+        send_replies: bool = False,
+        spoiler: bool = False,
+        validate_on_submit: bool = True,
+        subreddit: str | None = None,
+        collection_id: str | None = None,
+        flair_id: str | None = None,
+        flair_text: str | None = None,
+        discussion_type: str | None = None,
+        event_end: str | None = None,
+        event_start: str | None = None,
+        event_tz: str | None = None,
+        g_recaptcha_response: str | None = None,
+    ):
+        if subreddit is None:
+            res = self.me()
+
+            if res.status_code != 200:
+                return res
+
+            me_name = res.json()["name"]
+            subreddit = f"u_{me_name}"
+
+        data = {
+            "api_type": "json",
+            "items": [],
+            "nsfw": nsfw,
+            "sendreplies": send_replies,
+            "show_error_list": True,
+            "spoiler": spoiler,
+            "sr": subreddit,
+            "title": title,
+            "validate_on_submit": validate_on_submit,
+        }
+
+        for key, value in (
+            ("flair_id", flair_id),
+            ("flair_text", flair_text),
+            ("collection_id", collection_id),
+            ("discussion_type", discussion_type),
+            ("event_end", event_end),
+            ("event_start", event_start),
+            ("event_tz", event_tz),
+            ("g_recaptcha_response", g_recaptcha_response),
+        ):
+            if value is not None:
+                data[key] = value
+
+        for img_path, img_data in images.items():
+            data["items"].append(
+                {
+                    "caption": img_data.get("caption", ""),
+                    "outbound_url": img_data.get("outbound_url", ""),
+                    "media_id": self.__upload_media(
+                        img_path,
+                        upload_type="gallery",
+                    )[0],
+                }
+            )
+
+        return self.post("api/submit_gallery_post", json=data)
+
+    def __convert_rte_body(self, md_text: str):
+        return self.post(
+            "api/convert_rte_body_format",
+            data={
+                "output_mode": "rtjson",
+                "markdown_text": md_text,
+            }
         )

@@ -47,3 +47,7 @@ class RateLimitException(Exception):
             sleep(
                 (datetime.now(tz=timezone.utc) - self.__reset).total_seconds()
             )
+
+
+class MediaUploadException(Exception):
+    pass
