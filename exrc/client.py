@@ -966,3 +966,49 @@ class OAuth2Client:
                 "markdown_text": md_text,
             }
         )
+
+    def search(
+        self,
+        query: str,
+        sort: str = "new",  # relevance, hot, top, new, comments
+        syntax: str = "lucene",  # cloudsearch, lucene, plain
+        time_filter: str = "all",  # all, day, hour, month, week, year
+        restrict_sr: bool = True,
+        category: str | None = None,
+        include_facets: bool | None = None,
+        subreddit: str | None = None,
+        show: str | None = None,  # all
+        type: str | None = None,  # sr, link, user
+        after: str | None = None,
+        before: str | None = None,
+        count: int | None = None,
+        limit: int | None = None,
+    ):
+        if subreddit == "all":
+            restrict_sr = False
+
+        params = {
+            "q": query,
+            "restrict_sr": restrict_sr,
+            "sort": sort,
+            "t": time_filter,
+            "syntax": syntax,
+        }
+
+        for key, value in (
+            ("category", category),
+            ("include_facets", include_facets),
+            ("show", show),
+            ("type", type),
+            ("after", after),
+            ("before", before),
+            ("count", count),
+            ("limit", limit),
+        ):
+            if value is not None:
+                params[key] = value
+
+        if subreddit is not None:
+            return self.get(f"r/{subreddit}/search", params=params)
+
+        return self.get("search", params=params)
