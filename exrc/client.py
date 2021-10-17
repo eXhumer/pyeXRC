@@ -422,7 +422,12 @@ class OAuth2Client:
     def delete_thing(self, id: str):
         return self.post("api/del", data={"id": id})
 
-    def editusertext(self, text: str, thing_id: str):
+    def editusertext(
+        self,
+        text: str,
+        thing_id: str,
+        validate_on_submit: bool = True,
+    ):
         return self.post(
             "api/editusertext",
             data={
@@ -430,6 +435,7 @@ class OAuth2Client:
                 "return_rtjson": False,  # richtext not supported
                 "text": text,
                 "thing_id": thing_id,
+                "validate_on_submit": validate_on_submit,
             })
 
     def sendreplies(self, thing_id: str, state: bool):
