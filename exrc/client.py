@@ -46,7 +46,7 @@ class OAuth2Client:
         if session is None:
             session = Session()
 
-        if session.headers["User-Agent"] == default_user_agent:
+        if session.headers["User-Agent"] == default_user_agent():
             session.headers["User-Agent"] = user_agent
 
         self.__client_id = client_id
@@ -232,7 +232,7 @@ class OAuth2Client:
         if session is None:
             session = Session()
 
-        if session.headers["User-Agent"] == default_user_agent:
+        if session.headers["User-Agent"] == default_user_agent():
             session.headers["User-Agent"] = user_agent
 
         return cls(
@@ -262,7 +262,7 @@ class OAuth2Client:
         if session is None:
             session = Session()
 
-        if session.headers["User-Agent"] == default_user_agent:
+        if session.headers["User-Agent"] == default_user_agent():
             session.headers["User-Agent"] = user_agent
 
         return cls(
@@ -292,7 +292,7 @@ class OAuth2Client:
         if session is None:
             session = Session()
 
-        if session.headers["User-Agent"] == default_user_agent:
+        if session.headers["User-Agent"] == default_user_agent():
             session.headers["User-Agent"] = user_agent
 
         return cls(
@@ -321,7 +321,7 @@ class OAuth2Client:
         if session is None:
             session = Session()
 
-        if session.headers["User-Agent"] == default_user_agent:
+        if session.headers["User-Agent"] == default_user_agent():
             session.headers["User-Agent"] = user_agent
 
         return cls(
@@ -353,7 +353,7 @@ class OAuth2Client:
         if session is None:
             session = Session()
 
-        if session.headers["User-Agent"] == default_user_agent:
+        if session.headers["User-Agent"] == default_user_agent():
             session.headers["User-Agent"] = user_agent
 
         return cls(
