@@ -1061,3 +1061,43 @@ class OAuth2Client:
                 sort_keys=True,
                 indent=4,
             )
+
+    def comments(
+        self,
+        post_id: str,
+        sort: str = "confidence",
+        subreddit: str | None = None,
+        comment: str | None = None,
+        context: int | None = None,
+        depth: int | None = None,
+        limit: int | None = None,
+        showedits: bool | None = None,
+        showmedia: bool | None = None,
+        showmore: bool | None = None,
+        showtitle: bool | None = None,
+        threaded: bool | None = None,
+        truncate: int | None = None,
+    ):
+        params = {
+            "sort": sort,
+        }
+
+        for key, value in (
+            ("comment", comment),
+            ("context", context),
+            ("depth", depth),
+            ("limit", limit),
+            ("showedits", showedits),
+            ("showmedia", showmedia),
+            ("showmore", showmore),
+            ("showtitle", showtitle),
+            ("threaded", threaded),
+            ("truncate", truncate),
+        ):
+            if value is not None:
+                params[key] = value
+
+        if subreddit is not None:
+            self.get(f"r/{subreddit}/comments/{post_id}", params=params)
+
+        return self.get(f"r/{subreddit}/comments/{post_id}", params=params)
