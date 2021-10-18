@@ -1047,10 +1047,12 @@ class OAuth2Client:
         }
 
         if self.__credential.device_id is not None:
-            json_data.update({"device_id": self.__device_id})
+            json_data.update({"device_id": self.__credential.device_id})
 
         if self.__credential.refresh_token is not None:
-            json_data.update({"refresh_token": self.__refresh_token})
+            json_data.update({
+                "refresh_token": self.__credential.refresh_token,
+            })
 
         with token_path.open(mode="w") as out_stream:
             dump(
