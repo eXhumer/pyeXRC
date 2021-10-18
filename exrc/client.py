@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
-from json import dumps, loads
+from json import dump, dumps, load, loads
 from mimetypes import guess_type
 from pathlib import Path
 from random import SystemRandom
@@ -1012,3 +1012,50 @@ class OAuth2Client:
             return self.get(f"r/{subreddit}/search", params=params)
 
         return self.get("search", params=params)
+
+    @classmethod
+    def load_from_file(
+        cls,
+        token_path: Path,
+        session: Session | None = None,
+        user_agent: str = f"{__package__}/{__version__}",
+    ):
+        client_id = None
+        client_secret = None
+
+        with token_path.open(mode="r") as token_stream:
+            token_data = load(token_stream)
+            client_id = token_data["client_id"]
+            client_secret = token_data["client_secret"]
+
+        return cls(
+            client_id,
+            client_secret,
+            OAuth2Credential.load_from_file(token_path),
+            session=session,
+            user_agent=user_agent,
+        )
+
+    def save_to_file(self, token_path: Path):
+        json_data = {
+            "access_token": self.__credential.access_token,
+            "expires_at": self.__credential.expires_at.isoformat(),
+            "token_type": self.__credential.token_type,
+            "scopes": self.__credential.scopes,
+            "client_id": self.__client_id,
+            "client_secret": self.__client_secret,
+        }
+
+        if self.__credential.device_id is not None:
+            json_data.update({"device_id": self.__device_id})
+
+        if self.__credential.refresh_token is not None:
+            json_data.update({"refresh_token": self.__refresh_token})
+
+        with token_path.open(mode="w") as out_stream:
+            dump(
+                json_data,
+                out_stream,
+                sort_keys=True,
+                indent=4,
+            )
