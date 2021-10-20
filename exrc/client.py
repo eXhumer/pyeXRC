@@ -1101,3 +1101,29 @@ class OAuth2Client:
             self.get(f"r/{subreddit}/comments/{post_id}", params=params)
 
         return self.get(f"r/{subreddit}/comments/{post_id}", params=params)
+
+    def info(
+        self,
+        ids: List[str] | None = None,
+        sr_names: List[str] | None = None,
+        url: str | None = None,
+        subreddit: str | None = None,
+    ):
+        params = None
+
+        if ids is not None or sr_names is not None or url is not None:
+            params = {}
+
+            if ids is not None:
+                params.update({"id": ",".join(ids)})
+
+            if sr_names is not None:
+                params.update({"sr_name": ",".join(sr_names)})
+
+            if url is not None:
+                params.update({"url": url})
+
+        if subreddit is not None:
+            return self.get(f"r/{subreddit}/api/info", params=params)
+
+        return self.get("api/info", params=params)
