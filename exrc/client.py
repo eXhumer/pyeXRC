@@ -690,6 +690,43 @@ class OAuth2Client:
             richtext_json=rt_json,
         )
 
+    def submit_url(
+        self,
+        title: str,
+        url: str,
+        nsfw: bool = False,
+        resubmit: bool = True,
+        send_replies: bool = False,
+        spoiler: bool = False,
+        subreddit: str | None = None,
+        collection_id: str | None = None,
+        flair_id: str | None = None,
+        flair_text: str | None = None,
+        discussion_type: str | None = None,
+        event_end: str | None = None,
+        event_start: str | None = None,
+        event_tz: str | None = None,
+        g_recaptcha_response: str | None = None,
+    ):
+        return self.__submit(
+            "link",
+            title,
+            url=url,
+            nsfw=nsfw,
+            resubmit=resubmit,
+            send_replies=send_replies,
+            spoiler=spoiler,
+            subreddit=subreddit,
+            collection_id=collection_id,
+            flair_id=flair_id,
+            flair_text=flair_text,
+            discussion_type=discussion_type,
+            event_end=event_end,
+            event_start=event_start,
+            event_tz=event_tz,
+            g_recaptcha_response=g_recaptcha_response,
+        )
+
     def __upload_media(
         self,
         media_path: Path,
