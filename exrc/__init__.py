@@ -17,3 +17,4 @@
 from pkg_resources import require
 
 __version__ = require(__package__)[0].version
+default_user_agent = f"{__package__}/{__version__}"

@@ -23,11 +23,11 @@ from string import ascii_letters, digits
 from typing import Any, Dict, List
 
 from requests import Session
-from requests.utils import default_user_agent
+from requests.utils import default_user_agent as requests_user_agent
 from requests_toolbelt import MultipartEncoder
 from websocket import create_connection
 
-from . import __version__
+from . import default_user_agent
 from .auth import OAuth2Credential
 from .exception import (
     MediaUploadException,
@@ -50,13 +50,21 @@ class OAuth2Client:
         client_secret: str,
         credential: OAuth2Credential,
         session: Session | None = None,
-        user_agent: str = f"{__package__}/{__version__}",
+        user_agent: str | None = None,
     ):
         if session is None:
             session = Session()
 
-        if session.headers["User-Agent"] == default_user_agent():
-            session.headers["User-Agent"] = user_agent
+        if session.headers["User-Agent"] == requests_user_agent():
+            if user_agent is not None:
+                session.headers["User-Agent"] = user_agent
+
+            else:
+                session.headers["User-Agent"] = (
+                    default_user_agent
+                    if user_agent is None
+                    else user_agent
+                )
 
         self.__client_id = client_id
         self.__client_secret = client_secret
@@ -236,13 +244,21 @@ class OAuth2Client:
         password: str,
         session: Session | None = None,
         two_factor_code: str | None = None,
-        user_agent: str = f"{__package__}/{__version__}",
+        user_agent: str | None = None,
     ):
         if session is None:
             session = Session()
 
-        if session.headers["User-Agent"] == default_user_agent():
-            session.headers["User-Agent"] = user_agent
+        if session.headers["User-Agent"] == requests_user_agent():
+            if user_agent is not None:
+                session.headers["User-Agent"] = user_agent
+
+            else:
+                session.headers["User-Agent"] = (
+                    default_user_agent
+                    if user_agent is None
+                    else user_agent
+                )
 
         return cls(
             client_id,
@@ -266,13 +282,21 @@ class OAuth2Client:
         client_id: str,
         client_secret: str,
         session: Session | None = None,
-        user_agent: str = f"{__package__}/{__version__}",
+        user_agent: str | None = None,
     ):
         if session is None:
             session = Session()
 
-        if session.headers["User-Agent"] == default_user_agent():
-            session.headers["User-Agent"] = user_agent
+        if session.headers["User-Agent"] == requests_user_agent():
+            if user_agent is not None:
+                session.headers["User-Agent"] = user_agent
+
+            else:
+                session.headers["User-Agent"] = (
+                    default_user_agent
+                    if user_agent is None
+                    else user_agent
+                )
 
         return cls(
             client_id,
@@ -296,13 +320,21 @@ class OAuth2Client:
             for _ in range(30)
         ]),
         session: Session | None = None,
-        user_agent: str = f"{__package__}/{__version__}",
+        user_agent: str | None = None,
     ):
         if session is None:
             session = Session()
 
-        if session.headers["User-Agent"] == default_user_agent():
-            session.headers["User-Agent"] = user_agent
+        if session.headers["User-Agent"] == requests_user_agent():
+            if user_agent is not None:
+                session.headers["User-Agent"] = user_agent
+
+            else:
+                session.headers["User-Agent"] = (
+                    default_user_agent
+                    if user_agent is None
+                    else user_agent
+                )
 
         return cls(
             client_id,
@@ -325,13 +357,21 @@ class OAuth2Client:
         authcode: str,
         callback_url: str,
         session: Session | None = None,
-        user_agent: str = f"{__package__}/{__version__}",
+        user_agent: str | None = None,
     ):
         if session is None:
             session = Session()
 
-        if session.headers["User-Agent"] == default_user_agent():
-            session.headers["User-Agent"] = user_agent
+        if session.headers["User-Agent"] == requests_user_agent():
+            if user_agent is not None:
+                session.headers["User-Agent"] = user_agent
+
+            else:
+                session.headers["User-Agent"] = (
+                    default_user_agent
+                    if user_agent is None
+                    else user_agent
+                )
 
         return cls(
             client_id,
@@ -357,13 +397,21 @@ class OAuth2Client:
         scopes: List[str],
         state: str | None = None,
         session: Session | None = None,
-        user_agent: str = f"{__package__}/{__version__}",
+        user_agent: str | None = None,
     ):
         if session is None:
             session = Session()
 
-        if session.headers["User-Agent"] == default_user_agent():
-            session.headers["User-Agent"] = user_agent
+        if session.headers["User-Agent"] == requests_user_agent():
+            if user_agent is not None:
+                session.headers["User-Agent"] = user_agent
+
+            else:
+                session.headers["User-Agent"] = (
+                    default_user_agent
+                    if user_agent is None
+                    else user_agent
+                )
 
         return cls(
             client_id,
@@ -1055,7 +1103,7 @@ class OAuth2Client:
         cls,
         token_path: Path,
         session: Session | None = None,
-        user_agent: str = f"{__package__}/{__version__}",
+        user_agent: str | None = None,
     ):
         client_id = None
         client_secret = None
@@ -1064,6 +1112,20 @@ class OAuth2Client:
             token_data = load(token_stream)
             client_id = token_data["client_id"]
             client_secret = token_data["client_secret"]
+
+        if session is None:
+            session = Session()
+
+        if session.headers["User-Agent"] == requests_user_agent():
+            if user_agent is not None:
+                session.headers["User-Agent"] = user_agent
+
+            else:
+                session.headers["User-Agent"] = (
+                    default_user_agent
+                    if user_agent is None
+                    else user_agent
+                )
 
         return cls(
             client_id,
