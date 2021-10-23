@@ -202,7 +202,7 @@ class OAuth2Credential:
             },
         )
 
-        if res.status_code != 200:
+        if not res.ok:
             raise ResponseException(
                 res, "Failed to retrieve Reddit valid scopes!"
             )
@@ -311,7 +311,7 @@ class OAuth2Credential:
             auth=HTTPBasicAuth(client_id, client_secret),
         )
 
-        if res.status_code != 200:
+        if not res.ok:
             raise ResponseException(
                 res,
                 "Failed to refresh OAuth2 credential!",
@@ -411,7 +411,7 @@ class OAuth2Credential:
             auth=HTTPBasicAuth(client_id, client_secret),
         )
 
-        if res.status_code != 200:
+        if not res.ok:
             raise ResponseException(
                 res,
                 "Failed to get OAuth2 credential via password flow!",
@@ -449,7 +449,7 @@ class OAuth2Credential:
             auth=HTTPBasicAuth(client_id, client_secret),
         )
 
-        if res.status_code != 200:
+        if not res.ok:
             raise ResponseException(
                 res,
                 "Failed to get OAuth2 credential via client credential flow!",
@@ -495,7 +495,7 @@ class OAuth2Credential:
             auth=HTTPBasicAuth(client_id, client_secret),
         )
 
-        if res.status_code != 200:
+        if not res.ok:
             raise ResponseException(
                 res,
                 "Failed to get OAuth2 credential via installed " +
@@ -542,7 +542,7 @@ class OAuth2Credential:
             auth=HTTPBasicAuth(client_id, client_secret),
         )
 
-        if res.status_code != 200:
+        if not res.ok:
             raise ResponseException(
                 res,
                 "Failed to retrieve OAuth2 credential from authorization " +

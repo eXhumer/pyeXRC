@@ -544,7 +544,7 @@ class OAuth2Client:
         if subreddit is None:
             res = self.me()
 
-            if res.status_code != 200:
+            if not res.ok:
                 return res
 
             me_name = res.json()["name"]
@@ -604,7 +604,7 @@ class OAuth2Client:
         if subreddit is None:
             res = self.me()
 
-            if res.status_code != 200:
+            if not res.ok:
                 return res
 
             me_name = res.json()["name"]
@@ -742,7 +742,7 @@ class OAuth2Client:
             },
         )
 
-        if res.status_code != 200:
+        if not res.ok:
             raise ResponseException(
                 res,
                 "ERROR: Invalid status code while requesting media lease!",
@@ -773,7 +773,7 @@ class OAuth2Client:
             headers={"Content-Type": mp_data.content_type},
         )
 
-        if res.status_code != 201:
+        if not res.ok:
             raise ResponseException(
                 res,
                 "ERROR: Invalid status code while uploading media!",
@@ -950,7 +950,7 @@ class OAuth2Client:
         if subreddit is None:
             res = self.me()
 
-            if res.status_code != 200:
+            if not res.ok:
                 return res
 
             me_name = res.json()["name"]
