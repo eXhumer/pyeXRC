@@ -53,6 +53,8 @@ def _client_session_setup(
         else:
             session.headers["User-Agent"] = user_agent
 
+    return session
+
 
 class OAuth2Client:
     resource_base_url = "https://oauth.reddit.com"
