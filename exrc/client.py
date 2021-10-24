@@ -267,11 +267,11 @@ class OAuth2Client:
                 two_factor_code=two_factor_code,
                 session=session,
             ),
-            session=session,
-            user_agent=_client_session_setup(
+            session=_client_session_setup(
                 session=session,
                 user_agent=user_agent,
             ),
+            user_agent=user_agent,
         )
 
     @classmethod
@@ -290,11 +290,11 @@ class OAuth2Client:
                 client_secret,
                 session=session,
             ),
-            session=session,
-            user_agent=_client_session_setup(
+            session=_client_session_setup(
                 session=session,
                 user_agent=user_agent,
             ),
+            user_agent=user_agent,
         )
 
     @classmethod
@@ -318,11 +318,11 @@ class OAuth2Client:
                 device_id=device_id,
                 session=session,
             ),
-            session=session,
-            user_agent=_client_session_setup(
+            session=_client_session_setup(
                 session=session,
                 user_agent=user_agent,
             ),
+            user_agent=user_agent,
         )
 
     @classmethod
@@ -345,11 +345,11 @@ class OAuth2Client:
                 callback_url,
                 session=session,
             ),
-            session=session,
-            user_agent=_client_session_setup(
+            session=_client_session_setup(
                 session=session,
                 user_agent=user_agent,
             ),
+            user_agent=user_agent,
         )
 
     @classmethod
@@ -376,11 +376,11 @@ class OAuth2Client:
                 state=state,
                 session=session,
             ),
-            session=session,
-            user_agent=_client_session_setup(
+            session=_client_session_setup(
                 session=session,
                 user_agent=user_agent,
             ),
+            user_agent=user_agent,
         )
 
     def comment(self, text: str, thing_id: str):
