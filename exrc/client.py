@@ -36,6 +36,24 @@ from .exception import (
 )
 
 
+def _client_session_setup(
+    session: Session | None = None,
+    user_agent: str | None = None,
+):
+    """Method to setup or create a HTTP client session with proper user-agent
+    """
+
+    if session is None:
+        session = Session()
+
+    if session.headers["User-Agent"] == requests_user_agent():
+        if user_agent is None:
+            session.headers["User-Agent"] = default_user_agent
+
+        else:
+            session.headers["User-Agent"] = user_agent
+
+
 class OAuth2Client:
     resource_base_url = "https://oauth.reddit.com"
     __ratelimit_status = {
@@ -52,23 +70,12 @@ class OAuth2Client:
         session: Session | None = None,
         user_agent: str | None = None,
     ):
-        if session is None:
-            session = Session()
-
-        if session.headers["User-Agent"] == requests_user_agent():
-            if user_agent is not None:
-                session.headers["User-Agent"] = user_agent
-
-            else:
-                session.headers["User-Agent"] = (
-                    default_user_agent
-                    if user_agent is None
-                    else user_agent
-                )
-
         self.__client_id = client_id
         self.__client_secret = client_secret
-        self.__session = session
+        self.__session = _client_session_setup(
+            session=session,
+            user_agent=user_agent,
+        )
         self.__credential = credential
 
     @staticmethod
@@ -246,20 +253,6 @@ class OAuth2Client:
         two_factor_code: str | None = None,
         user_agent: str | None = None,
     ):
-        if session is None:
-            session = Session()
-
-        if session.headers["User-Agent"] == requests_user_agent():
-            if user_agent is not None:
-                session.headers["User-Agent"] = user_agent
-
-            else:
-                session.headers["User-Agent"] = (
-                    default_user_agent
-                    if user_agent is None
-                    else user_agent
-                )
-
         return cls(
             client_id,
             client_secret,
@@ -273,7 +266,10 @@ class OAuth2Client:
                 session=session,
             ),
             session=session,
-            user_agent=user_agent,
+            user_agent=_client_session_setup(
+                session=session,
+                user_agent=user_agent,
+            ),
         )
 
     @classmethod
@@ -284,20 +280,6 @@ class OAuth2Client:
         session: Session | None = None,
         user_agent: str | None = None,
     ):
-        if session is None:
-            session = Session()
-
-        if session.headers["User-Agent"] == requests_user_agent():
-            if user_agent is not None:
-                session.headers["User-Agent"] = user_agent
-
-            else:
-                session.headers["User-Agent"] = (
-                    default_user_agent
-                    if user_agent is None
-                    else user_agent
-                )
-
         return cls(
             client_id,
             client_secret,
@@ -307,7 +289,10 @@ class OAuth2Client:
                 session=session,
             ),
             session=session,
-            user_agent=user_agent,
+            user_agent=_client_session_setup(
+                session=session,
+                user_agent=user_agent,
+            ),
         )
 
     @classmethod
@@ -322,20 +307,6 @@ class OAuth2Client:
         session: Session | None = None,
         user_agent: str | None = None,
     ):
-        if session is None:
-            session = Session()
-
-        if session.headers["User-Agent"] == requests_user_agent():
-            if user_agent is not None:
-                session.headers["User-Agent"] = user_agent
-
-            else:
-                session.headers["User-Agent"] = (
-                    default_user_agent
-                    if user_agent is None
-                    else user_agent
-                )
-
         return cls(
             client_id,
             client_secret,
@@ -346,7 +317,10 @@ class OAuth2Client:
                 session=session,
             ),
             session=session,
-            user_agent=user_agent,
+            user_agent=_client_session_setup(
+                session=session,
+                user_agent=user_agent,
+            ),
         )
 
     @classmethod
@@ -359,20 +333,6 @@ class OAuth2Client:
         session: Session | None = None,
         user_agent: str | None = None,
     ):
-        if session is None:
-            session = Session()
-
-        if session.headers["User-Agent"] == requests_user_agent():
-            if user_agent is not None:
-                session.headers["User-Agent"] = user_agent
-
-            else:
-                session.headers["User-Agent"] = (
-                    default_user_agent
-                    if user_agent is None
-                    else user_agent
-                )
-
         return cls(
             client_id,
             client_secret,
@@ -384,7 +344,10 @@ class OAuth2Client:
                 session=session,
             ),
             session=session,
-            user_agent=user_agent,
+            user_agent=_client_session_setup(
+                session=session,
+                user_agent=user_agent,
+            ),
         )
 
     @classmethod
@@ -399,20 +362,6 @@ class OAuth2Client:
         session: Session | None = None,
         user_agent: str | None = None,
     ):
-        if session is None:
-            session = Session()
-
-        if session.headers["User-Agent"] == requests_user_agent():
-            if user_agent is not None:
-                session.headers["User-Agent"] = user_agent
-
-            else:
-                session.headers["User-Agent"] = (
-                    default_user_agent
-                    if user_agent is None
-                    else user_agent
-                )
-
         return cls(
             client_id,
             client_secret,
@@ -426,7 +375,10 @@ class OAuth2Client:
                 session=session,
             ),
             session=session,
-            user_agent=user_agent,
+            user_agent=_client_session_setup(
+                session=session,
+                user_agent=user_agent,
+            ),
         )
 
     def comment(self, text: str, thing_id: str):
@@ -1113,26 +1065,15 @@ class OAuth2Client:
             client_id = token_data["client_id"]
             client_secret = token_data["client_secret"]
 
-        if session is None:
-            session = Session()
-
-        if session.headers["User-Agent"] == requests_user_agent():
-            if user_agent is not None:
-                session.headers["User-Agent"] = user_agent
-
-            else:
-                session.headers["User-Agent"] = (
-                    default_user_agent
-                    if user_agent is None
-                    else user_agent
-                )
-
         return cls(
             client_id,
             client_secret,
             OAuth2Credential.load_from_file(token_path),
             session=session,
-            user_agent=user_agent,
+            user_agent=_client_session_setup(
+                session=session,
+                user_agent=user_agent,
+            ),
         )
 
     def save_to_file(self, token_path: Path):
