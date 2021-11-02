@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
+from io import BufferedIOBase
 from json import dump, dumps, load, loads
 from mimetypes import guess_type
 from pathlib import Path
@@ -27,7 +28,7 @@ from requests.utils import default_user_agent as requests_user_agent
 from requests_toolbelt import MultipartEncoder
 from websocket import create_connection
 
-from . import default_user_agent
+from . import default_user_agent, default_video_poster
 from .auth import OAuth2Credential
 from .exception import (
     MediaUploadException,
@@ -729,18 +730,19 @@ class OAuth2Client:
             g_recaptcha_response=g_recaptcha_response,
         )
 
-    def __upload_media(
+    def __upload_media_io(
         self,
-        media_path: Path,
+        media_stream: BufferedIOBase,
+        media_name: str,
         upload_type: str = "link",
     ):
-        mimetype = guess_type(media_path.name)[0]
+        mimetype = guess_type(media_name)[0]
 
         res = self.post(
             "api/media/asset",
             data={
-                "filepath": media_path.name,
-                "mimetype": guess_type(media_path.name)[0],
+                "filepath": media_name,
+                "mimetype": mimetype,
             },
         )
 
@@ -761,8 +763,8 @@ class OAuth2Client:
 
         fields.update({
             "file": (
-                media_path.name,
-                media_path.open(mode="rb"),
+                media_name,
+                media_stream,
                 mimetype,
             )
         })
@@ -787,6 +789,16 @@ class OAuth2Client:
             else asset_id
         ), websocket_url
 
+    def __upload_media(
+        self,
+        media_path: Path,
+        upload_type: str = "link",
+    ):
+        return self.__upload_media_io(
+            media_path.open(mode="rb"),
+            upload_type=upload_type,
+        )
+
     def __submit_media(
         self,
         kind: str,
@@ -810,6 +822,9 @@ class OAuth2Client:
     ):
         if kind not in ["image", "video", "videogif"]:
             raise ValueError("Invalid media kind!")
+
+        if kind in ["video", "videogif"]:
+            assert video_poster_url is not None
 
         media_url, ws_url = self.__upload_media(media_path)
 
@@ -903,6 +918,14 @@ class OAuth2Client:
         event_tz: str | None = None,
         g_recaptcha_response: str | None = None,
     ):
+        if thumbnail_image_path is None:
+            video_poster_url = \
+                self.__upload_media_io(default_video_poster, "poster.png")[0]
+
+        else:
+            assert guess_type(thumbnail_image_path)[0].startswith("image")
+            video_poster_url = self.__upload_media(thumbnail_image_path)[0]
+
         return self.__submit_media(
             "videogif" if videogif else "video",
             title,
@@ -920,11 +943,7 @@ class OAuth2Client:
             event_end=event_end,
             event_start=event_start,
             event_tz=event_tz,
-            video_poster_url=(
-                self.__upload_media(thumbnail_image_path)[0]
-                if thumbnail_image_path is not None
-                else None
-            ),
+            video_poster_url=video_poster_url,
             g_recaptcha_response=g_recaptcha_response,
         )
 

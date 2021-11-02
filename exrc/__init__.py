@@ -14,7 +14,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Reddit OAuth2 Client Library Module"""
-from pkg_resources import require
+from pkg_resources import require, resource_stream
 
 __version__ = require(__package__)[0].version
 default_user_agent = f"{__package__}/{__version__}"
+default_video_poster = resource_stream(__name__, "default_video_poster.png")

@@ -386,7 +386,7 @@ class OAuth2Credential:
         session: Session | None = None,
     ):
         if two_factor_code is not None:
-            if len(two_factor_code) == 6 and two_factor_code.isnumeric():
+            if not(len(two_factor_code) == 6 and two_factor_code.isnumeric()):
                 raise ValueError("Invalid two factor code! Must be of length" +
                                  " 6 and must be numeric!")
 
