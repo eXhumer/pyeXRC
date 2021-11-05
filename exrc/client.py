@@ -734,7 +734,6 @@ class OAuth2Client:
         self,
         media_stream: BufferedIOBase,
         media_name: str,
-        upload_type: str = "link",
     ):
         mimetype = guess_type(media_name)[0]
 
@@ -758,7 +757,6 @@ class OAuth2Client:
             for item
             in res.json()["args"]["fields"]
         }
-        websocket_url: str = res.json()["asset"]["websocket_url"]
         asset_id: str = res.json()["asset"]["asset_id"]
 
         fields.update({
@@ -783,20 +781,12 @@ class OAuth2Client:
                 "ERROR: Invalid status code while uploading media!",
             )
 
-        return (
-            f"https:{action}/{fields['key']}"
-            if upload_type == "link"
-            else asset_id
-        ), websocket_url
+        return f"https:{action}/{fields['key']}", asset_id
 
-    def __upload_media(
-        self,
-        media_path: Path,
-        upload_type: str = "link",
-    ):
+    def __upload_media(self, media_path: Path):
         return self.__upload_media_io(
             media_path.open(mode="rb"),
-            upload_type=upload_type,
+            media_path.name,
         )
 
     def __submit_media(
@@ -826,9 +816,9 @@ class OAuth2Client:
         if kind in ["video", "videogif"]:
             assert video_poster_url is not None
 
-        media_url, ws_url = self.__upload_media(media_path)
+        media_url = self.__upload_media(media_path)[0]
 
-        self.__submit(
+        res = self.__submit(
             kind,
             title,
             url=media_url,
@@ -849,6 +839,13 @@ class OAuth2Client:
             g_recaptcha_response=g_recaptcha_response,
         )
 
+        if not res.ok:
+            raise ResponseException(
+                res,
+                "Invalid response while submitting media post to Reddit!",
+            )
+
+        ws_url = res.json()["json"]["data"]["websocket_url"]
         ws_conn = create_connection(ws_url)
         ws_update = loads(ws_conn.recv())
         ws_conn.close()
@@ -948,7 +945,7 @@ class OAuth2Client:
         )
 
     def upload_inline_media(self, media_path: Path):
-        return self.__upload_media(media_path, upload_type="selfpost")[0]
+        return self.__upload_media(media_path)[1]
 
     def submit_gallery(
         self,
@@ -1007,10 +1004,7 @@ class OAuth2Client:
                 {
                     "caption": img_data.get("caption", ""),
                     "outbound_url": img_data.get("outbound_url", ""),
-                    "media_id": self.__upload_media(
-                        img_path,
-                        upload_type="gallery",
-                    )[0],
+                    "media_id": self.__upload_media(img_path)[1],
                 }
             )
 
