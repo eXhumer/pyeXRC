@@ -72,6 +72,7 @@ class OAuth2Client:
         credential: OAuth2Credential,
         session: Session | None = None,
         user_agent: str | None = None,
+        token_path: Path | None = None,
     ):
         self.__client_id = client_id
         self.__client_secret = client_secret
@@ -80,6 +81,7 @@ class OAuth2Client:
             user_agent=user_agent,
         )
         self.__credential = credential
+        self.__token_path = token_path
 
     @staticmethod
     def ratelimit_remaining() -> float | None:
@@ -108,6 +110,9 @@ class OAuth2Client:
                 self.__client_id,
                 self.__client_secret,
             )
+
+            if self.__token_path is not None:
+                self.save_to_file()
 
         if "params" in req_opts:
             if "raw_json" not in req_opts["params"]:
@@ -255,6 +260,7 @@ class OAuth2Client:
         session: Session | None = None,
         two_factor_code: str | None = None,
         user_agent: str | None = None,
+        token_path: Path | None = None,
     ):
         return cls(
             client_id,
@@ -273,6 +279,7 @@ class OAuth2Client:
                 user_agent=user_agent,
             ),
             user_agent=user_agent,
+            token_path=token_path,
         )
 
     @classmethod
@@ -282,6 +289,7 @@ class OAuth2Client:
         client_secret: str,
         session: Session | None = None,
         user_agent: str | None = None,
+        token_path: Path | None = None,
     ):
         return cls(
             client_id,
@@ -296,6 +304,7 @@ class OAuth2Client:
                 user_agent=user_agent,
             ),
             user_agent=user_agent,
+            token_path=token_path,
         )
 
     @classmethod
@@ -309,6 +318,7 @@ class OAuth2Client:
         ]),
         session: Session | None = None,
         user_agent: str | None = None,
+        token_path: Path | None = None,
     ):
         return cls(
             client_id,
@@ -324,6 +334,7 @@ class OAuth2Client:
                 user_agent=user_agent,
             ),
             user_agent=user_agent,
+            token_path=token_path,
         )
 
     @classmethod
@@ -335,6 +346,7 @@ class OAuth2Client:
         callback_url: str,
         session: Session | None = None,
         user_agent: str | None = None,
+        token_path: Path | None = None,
     ):
         return cls(
             client_id,
@@ -351,6 +363,7 @@ class OAuth2Client:
                 user_agent=user_agent,
             ),
             user_agent=user_agent,
+            token_path=token_path,
         )
 
     @classmethod
@@ -364,6 +377,7 @@ class OAuth2Client:
         state: str | None = None,
         session: Session | None = None,
         user_agent: str | None = None,
+        token_path: Path | None = None,
     ):
         return cls(
             client_id,
@@ -382,6 +396,7 @@ class OAuth2Client:
                 user_agent=user_agent,
             ),
             user_agent=user_agent,
+            token_path=token_path,
         )
 
     def comment(self, text: str, thing_id: str):
@@ -1089,9 +1104,13 @@ class OAuth2Client:
                 session=session,
                 user_agent=user_agent,
             ),
+            token_path=token_path,
         )
 
-    def save_to_file(self, token_path: Path):
+    def save_to_file(self):
+        if self.__token_path is None:
+            raise ValueError("No token path specified!")
+
         json_data = {
             "access_token": self.__credential.access_token,
             "expires_at": self.__credential.expires_at.isoformat(),
@@ -1109,7 +1128,7 @@ class OAuth2Client:
                 "refresh_token": self.__credential.refresh_token,
             })
 
-        with token_path.open(mode="w") as out_stream:
+        with self.__token_path.open(mode="w") as out_stream:
             dump(
                 json_data,
                 out_stream,
