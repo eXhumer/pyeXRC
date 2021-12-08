@@ -19,4 +19,4 @@ pip install .
 ```
 
 ## Licensing
-This project is licensed under OSI Approved [GNU GPLv3 **ONLY**](https://github.com/eXhumer/eXRC/blob/main/LICENSE.md).
+This project is licensed under OSI Approved [GNU GPLv3 **ONLY**](https://github.com/eXhumer/pyeXRC/blob/python3/LICENSE.md).
