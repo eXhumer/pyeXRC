@@ -1099,11 +1099,11 @@ class OAuth2Client:
             client_id,
             client_secret,
             OAuth2Credential.load_from_file(token_path),
-            session=session,
-            user_agent=_client_session_setup(
+            session=_client_session_setup(
                 session=session,
                 user_agent=user_agent,
             ),
+            user_agent=user_agent,
             token_path=token_path,
         )
 
