@@ -21,7 +21,7 @@ from mimetypes import guess_type
 from pathlib import Path
 from random import SystemRandom
 from string import ascii_letters, digits
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal
 
 from requests import Session
 from requests.utils import default_user_agent as requests_user_agent
@@ -1201,3 +1201,30 @@ class OAuth2Client:
             return self.get(f"r/{subreddit}/api/info", params=params)
 
         return self.get("api/info", params=params)
+
+    def posts(
+        self,
+        subreddit: str | None = None,
+        sort: Literal[
+            "best",
+            "controversial",
+            "new",
+            "random",
+            "rising",
+            "top",
+        ] = "best",
+        before: str | None = None,
+        limit: int | None = None,
+    ):
+        params = {}
+
+        if before:
+            params.update(before=before)
+
+        if limit:
+            params.update(limit=limit)
+
+        return self.get(
+            f"r/{subreddit}/{sort}" if subreddit else sort,
+            params=params,
+        )
