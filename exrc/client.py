@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
-from io import BufferedIOBase
+from io import IOBase
 from json import dump, dumps, load, loads
 from mimetypes import guess_type
 from pathlib import Path
@@ -747,7 +747,7 @@ class OAuth2Client:
 
     def __upload_media_io(
         self,
-        media_stream: BufferedIOBase,
+        media_stream: IOBase,
         media_name: str,
     ):
         mimetype = guess_type(media_name)[0]
@@ -808,7 +808,8 @@ class OAuth2Client:
         self,
         kind: str,
         title: str,
-        media_path: Path,
+        media_io: IOBase,
+        media_filename: str,
         nsfw: bool = False,
         resubmit: bool = True,
         send_replies: bool = False,
@@ -831,7 +832,10 @@ class OAuth2Client:
         if kind in ["video", "videogif"]:
             assert video_poster_url is not None
 
-        media_url = self.__upload_media(media_path)[0]
+        media_url = self.__upload_media_io(
+            media_io,
+            media_filename,
+        )[0]
 
         res = self.__submit(
             kind,
@@ -873,7 +877,8 @@ class OAuth2Client:
     def submit_image(
         self,
         title: str,
-        image_path: Path,
+        image_io: IOBase,
+        image_filename: str,
         nsfw: bool = False,
         resubmit: bool = True,
         send_replies: bool = False,
@@ -892,7 +897,8 @@ class OAuth2Client:
         return self.__submit_media(
             "image",
             title,
-            image_path,
+            image_io,
+            image_filename,
             nsfw=nsfw,
             resubmit=resubmit,
             send_replies=send_replies,
@@ -912,7 +918,8 @@ class OAuth2Client:
     def submit_video(
         self,
         title: str,
-        video_path: Path,
+        video_io: IOBase,
+        video_filename: str,
         videogif: bool = False,
         thumbnail_image_path: Path | None = None,
         nsfw: bool = False,
@@ -941,7 +948,8 @@ class OAuth2Client:
         return self.__submit_media(
             "videogif" if videogif else "video",
             title,
-            video_path,
+            video_io,
+            video_filename,
             nsfw=nsfw,
             resubmit=resubmit,
             send_replies=send_replies,
