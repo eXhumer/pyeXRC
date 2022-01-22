@@ -832,10 +832,10 @@ class OAuth2Client:
         if kind in ["video", "videogif"]:
             assert video_poster_url is not None
 
-        media_url = self.__upload_media_io(
+        media_url, asset_id = self.__upload_media_io(
             media_io,
             media_filename,
-        )[0]
+        )
 
         res = self.__submit(
             kind,
@@ -872,7 +872,12 @@ class OAuth2Client:
         if ws_update["type"] == "failed":
             raise MediaUploadException
 
-        return ws_update
+        return (
+            ws_update,
+            "https://" +
+            "i" if kind == "image" else "v" +
+            f".redd.it/{asset_id}",
+        )
 
     def submit_image(
         self,
