@@ -872,12 +872,9 @@ class OAuth2Client:
         if ws_update["type"] == "failed":
             raise MediaUploadException
 
-        return (
-            ws_update,
-            "https://" +
-            "i" if kind == "image" else "v" +
-            f".redd.it/{asset_id}",
-        )
+        post_type = "i" if kind == "image" else "v"
+        post_url = f"https://{post_type}.redd.it/{asset_id}"
+        return ws_update, post_url
 
     def submit_image(
         self,
