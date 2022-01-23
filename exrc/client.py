@@ -798,12 +798,6 @@ class OAuth2Client:
 
         return f"https:{action}/{fields['key']}", asset_id
 
-    def __upload_media(self, media_path: Path):
-        return self.__upload_media_io(
-            media_path.open(mode="rb"),
-            media_path.name,
-        )
-
     def __submit_media(
         self,
         kind: str,
@@ -945,7 +939,10 @@ class OAuth2Client:
 
         else:
             assert guess_type(thumbnail_image_path)[0].startswith("image")
-            video_poster_url = self.__upload_media(thumbnail_image_path)[0]
+            video_poster_url = self.__upload_media_io(
+                thumbnail_image_path.open(mode="rb"),
+                thumbnail_image_path.name,
+            )[0]
 
         return self.__submit_media(
             "videogif" if videogif else "video",
@@ -970,7 +967,10 @@ class OAuth2Client:
         )
 
     def upload_inline_media(self, media_path: Path):
-        return self.__upload_media(media_path)[1]
+        return self.__upload_media_io(
+            media_path.open(mode="rb"),
+            media_path.name,
+        )[1]
 
     def submit_gallery(
         self,
@@ -1029,7 +1029,10 @@ class OAuth2Client:
                 {
                     "caption": img_data.get("caption", ""),
                     "outbound_url": img_data.get("outbound_url", ""),
-                    "media_id": self.__upload_media(img_path)[1],
+                    "media_id": self.__upload_media_io(
+                        img_path.open(mode="rb"),
+                        img_path.name,
+                    )[1],
                 }
             )
 
