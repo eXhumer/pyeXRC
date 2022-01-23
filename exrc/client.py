@@ -14,6 +14,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from io import IOBase
 from json import dump, dumps, load, loads
@@ -859,9 +860,9 @@ class OAuth2Client:
             )
 
         ws_url = res.json()["json"]["data"]["websocket_url"]
-        ws_conn = create_connection(ws_url)
-        ws_update = loads(ws_conn.recv())
-        ws_conn.close()
+
+        with closing(create_connection(ws_url)) as ws:
+            ws_update = loads(ws.recv())
 
         if ws_update["type"] == "failed":
             raise MediaUploadException
