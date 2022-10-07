@@ -1,5 +1,5 @@
-# eXRC - Reddit OAuth2 Client
-# Copyright (C) 2021 - eXhumer
+# pyeXRC - Python Reddit Client
+# Copyright (C) 2021-2022 eXhumer
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,8 +14,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Reddit OAuth2 Client Library Module"""
-from pkg_resources import require, resource_stream
+from pkg_resources import require
+
+from ._client import RedditOAuth2Client  # noqa: F401
+from ._model import RedditOAuth2Token  # noqa: F401
 
 __version__ = require(__package__)[0].version
-default_user_agent = f"{__package__}/{__version__}"
-default_video_poster = resource_stream(__name__, "default_video_poster.png")
