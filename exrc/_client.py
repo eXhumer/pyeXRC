@@ -35,7 +35,7 @@ from requests_toolbelt import MultipartEncoder
 from websocket import create_connection
 
 from ._model import RedditConvertRTE, RedditMe, RedditMediaAsset, RedditMediaSubmission, \
-    RedditMediaUploadUpdate, RedditOAuth2Token, RedditScopesV1, RedditSubmissionData
+    RedditMediaUploadUpdate, RedditOAuth2Token, RedditScopesV1, RedditSubmission
 from ._utils import NoLoggingWSGIRequestHandler, OAuth2WSGICodeFlowExchangeApp
 
 __version__ = require(__package__)[0].version
@@ -249,11 +249,10 @@ class RedditOAuth2Client:
         if "User-Agent" not in session.headers:
             session.headers["User-Agent"] = __user_agent__
 
-        r = session.post(
-            f"{RedditOAuth2Client.BASE_URL}/{RedditOAuth2Client.ACCESS_TOKEN_V1}",
-            data={"code": code, "grant_type": "authorization_code", "redirect_uri": redirect_uri},
-            auth=HTTPBasicAuth(client_id, client_secret),
-        )
+        r = session.post(f"{RedditOAuth2Client.BASE_URL}/{RedditOAuth2Client.ACCESS_TOKEN_V1}",
+                         data={"code": code, "grant_type": "authorization_code",
+                               "redirect_uri": redirect_uri},
+                         auth=HTTPBasicAuth(client_id, client_secret))
         r.raise_for_status()
 
         token: RedditOAuth2Token = r.json()
@@ -586,7 +585,7 @@ class RedditOAuth2Client:
                           g_recaptcha_response=g_recaptcha_response)
         r.raise_for_status()
 
-        data: RedditSubmissionData = r.json()
+        data: RedditSubmission = r.json()
         return data
 
     def submit_poll(self, title: str, selftext: str, options: List[str], duration: int,
@@ -618,7 +617,7 @@ class RedditOAuth2Client:
         r = self.__request("POST", "api/submit_poll_post", json=data)
         r.raise_for_status()
 
-        data: RedditSubmissionData = r.json()
+        data: RedditSubmission = r.json()
         return data
 
     def submit_selftext(self, title: str, text: str, nsfw: bool = False, resubmit: bool = True,
@@ -646,7 +645,7 @@ class RedditOAuth2Client:
                           g_recaptcha_response=g_recaptcha_response, richtext_json=rt_json)
         r.raise_for_status()
 
-        data: RedditSubmissionData = r.json()
+        data: RedditSubmission = r.json()
         return data
 
     def submit_video(self, title: str, video_io: IO[bytes], video_filename: str,
