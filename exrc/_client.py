@@ -31,6 +31,7 @@ from xml.etree.ElementTree import parse as xml_parse
 
 from requests import Session
 from requests.auth import HTTPBasicAuth
+from requests.utils import default_user_agent as requests_user_agent
 from requests_toolbelt import MultipartEncoder
 from websocket import create_connection
 
@@ -75,7 +76,8 @@ class RedditOAuth2Client:
         self.__token = token
         self.__token_issued_at = token_issued_at
 
-        if "User-Agent" not in self.__session.headers:
+        if "User-Agent" not in self.__session.headers or \
+                self.__session.headers["User-Agent"] == requests_user_agent():
             self.__session.headers["User-Agent"] = __user_agent__
 
     def __convert_rte_body(self, md_text: str):
@@ -87,6 +89,9 @@ class RedditOAuth2Client:
                   data: Any | None = None):
         while endpoint.startswith("/"):
             endpoint = endpoint[1:]
+
+        if not self.__token_issued_at and "refresh_token" in self.__token:
+            self.refresh()
 
         if self.expired is True:
             if "refresh_token" not in self.__token:
@@ -246,13 +251,15 @@ class RedditOAuth2Client:
                                  client_secret: str | None = None, session: Session | None = None):
         session = session or RedditOAuth2Client.__SESSION
 
-        if "User-Agent" not in session.headers:
+        if "User-Agent" not in session.headers or \
+                session.headers["User-Agent"] == requests_user_agent():
             session.headers["User-Agent"] = __user_agent__
 
         r = session.post(f"{RedditOAuth2Client.BASE_URL}/{RedditOAuth2Client.ACCESS_TOKEN_V1}",
                          data={"code": code, "grant_type": "authorization_code",
                                "redirect_uri": redirect_uri},
-                         auth=HTTPBasicAuth(client_id, client_secret))
+                         auth=HTTPBasicAuth(client_id, client_secret or ""))
+
         r.raise_for_status()
 
         token: RedditOAuth2Token = r.json()
@@ -266,7 +273,8 @@ class RedditOAuth2Client:
                                 session: Session | None = None):
         session = session or RedditOAuth2Client.__SESSION
 
-        if "User-Agent" not in session.headers:
+        if "User-Agent" not in session.headers or \
+                session.headers["User-Agent"] == requests_user_agent():
             session.headers["User-Agent"] = __user_agent__
 
         r = session.post(
@@ -302,7 +310,8 @@ class RedditOAuth2Client:
 
         session = session or RedditOAuth2Client.__SESSION
 
-        if "User-Agent" not in session.headers:
+        if "User-Agent" not in session.headers or \
+                session.headers["User-Agent"] == requests_user_agent():
             session.headers["User-Agent"] = __user_agent__
 
         return cls.authorization_code_grant(wsgi_app.code, client_id, redirect_uri,
@@ -394,7 +403,8 @@ class RedditOAuth2Client:
         device_id = device_id or "".join([choice(ascii_letters + digits) for _ in range(30)])
         session = session or RedditOAuth2Client.__SESSION
 
-        if "User-Agent" not in session.headers:
+        if "User-Agent" not in session.headers or \
+                session.headers["User-Agent"] == requests_user_agent():
             session.headers["User-Agent"] = __user_agent__
 
         r = session.post(
@@ -434,13 +444,14 @@ class RedditOAuth2Client:
 
         session = session or RedditOAuth2Client.__SESSION
 
-        if "User-Agent" not in session.headers:
+        if "User-Agent" not in session.headers or \
+                session.headers["User-Agent"] == requests_user_agent():
             session.headers["User-Agent"] = __user_agent__
 
         r = session.post(
             f"{RedditOAuth2Client.BASE_URL}/{RedditOAuth2Client.ACCESS_TOKEN_V1}",
             data={"grant_type": "password", "username": username, "password": password},
-            auth=HTTPBasicAuth(client_id, client_secret),
+            auth=HTTPBasicAuth(client_id, client_secret or ""),
         )
         r.raise_for_status()
 
@@ -502,7 +513,8 @@ class RedditOAuth2Client:
     def scopes_v1(session: Session | None = None):
         session = session or RedditOAuth2Client.__SESSION
 
-        if "User-Agent" not in session.headers:
+        if "User-Agent" not in session.headers or \
+                session.headers["User-Agent"] == requests_user_agent():
             session.headers["User-Agent"] = __user_agent__
 
         r = session.get(f"{RedditOAuth2Client.BASE_URL}/{RedditOAuth2Client.SCOPES_V1}")
