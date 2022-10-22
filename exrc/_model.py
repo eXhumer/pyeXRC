@@ -17,6 +17,11 @@ from __future__ import annotations
 from typing import Any, Dict, List, Literal, NotRequired, TypedDict
 
 
+class RedditClientCredential(TypedDict):
+    client_id: str
+    client_secret: NotRequired[str]
+
+
 class RedditConvertRTE(TypedDict):
     output: RedditConvertRTEOutput
     output_mode: str

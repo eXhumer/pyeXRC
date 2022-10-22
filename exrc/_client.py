@@ -35,8 +35,9 @@ from requests.utils import default_user_agent as requests_user_agent
 from requests_toolbelt import MultipartEncoder
 from websocket import create_connection
 
-from ._model import RedditConvertRTE, RedditMe, RedditMediaAsset, RedditMediaSubmission, \
-    RedditMediaUploadUpdate, RedditOAuth2Token, RedditScopesV1, RedditSubmission
+from ._model import RedditClientCredential, RedditConvertRTE, RedditMe, RedditMediaAsset, \
+    RedditMediaSubmission, RedditMediaUploadUpdate, RedditOAuth2Token, RedditScopesV1, \
+    RedditSubmission
 from ._utils import NoLoggingWSGIRequestHandler, OAuth2WSGICodeFlowExchangeApp
 
 __version__ = require(__package__)[0].version
@@ -268,6 +269,15 @@ class RedditOAuth2Client:
         return cls(client_id, token, session=session, client_secret=client_secret,
                    token_issued_at=token_issued_at)
 
+    @property
+    def client_credential(self):
+        cc = RedditClientCredential(client_id=self.__client_id)
+
+        if self.__client_secret:
+            cc |= {"client_secret": self.__client_secret}
+
+        return cc
+
     @classmethod
     def client_credential_grant(cls, client_id: str, client_secret: str,
                                 session: Session | None = None):
@@ -475,12 +485,12 @@ class RedditOAuth2Client:
         return self.__request("GET", f"r/{subreddit}/{sort}" if subreddit else sort, params=params)
 
     def refresh(self):
-        if "refresh_token" in self.__token:
+        if "refresh_token" not in self.__token:
             raise KeyError("Attempting to refresh without refresh_token available!")
 
         r = self.__session.post(
             f"{RedditOAuth2Client.BASE_URL}/{RedditOAuth2Client.ACCESS_TOKEN_V1}",
-            data={"grant_type": "refresh_token", "refresh_token": self.__refresh_token},
+            data={"grant_type": "refresh_token", "refresh_token": self.__token["refresh_token"]},
             auth=HTTPBasicAuth(self.__client_id, self.__client_secret or ""),
         )
         r.raise_for_status()
