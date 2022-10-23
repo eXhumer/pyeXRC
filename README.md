@@ -10,7 +10,7 @@ Reddit OAuth2 client to access Reddit resources via [OAuth2](https://github.com/
 
 ### Install from source
 ```console
-pip install -e git+https://github.com/eXhumer/pyeXDC.git@dev#egg=exdc
+pip install -e git+https://github.com/eXhumer/pyeXRC.git@dev#egg=exrc
 ```
 
 ### Install from PyPI
