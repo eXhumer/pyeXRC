@@ -100,7 +100,7 @@ class OAuth2Client:
                 event_end: str | None = None, event_start: str | None = None,
                 event_tz: str | None = None, g_recaptcha_response: str | None = None,
                 richtext_json: dict | None = None):
-        assert not (bool(text) and bool(richtext_json))
+        assert not (text is not None and richtext_json is not None)
 
         data = {"api_type": "json", "nsfw": nsfw, "resubmit": resubmit,
                 "sendreplies": send_replies, "spoiler": spoiler, "title": title, "kind": kind,
@@ -123,7 +123,7 @@ class OAuth2Client:
         ):
             if value is not None:
                 if key == "richtext_json":
-                    dumps(value, separators=(":", ","))
+                    value = dumps(value, separators=(",", ":"))
 
                 data |= {key: value}
 
@@ -190,11 +190,11 @@ class OAuth2Client:
 
     def comment(self, thing_id: str, text: str | None = None, richtext_json: dict | None = None):
         assert text or richtext_json
-        data = {"api_type": "json", "return_rtjson": bool(richtext_json), "text": text or "",
+        data = {"api_type": "json", "return_rtjson": richtext_json is not None, "text": text or "",
                 "thing_id": thing_id}
 
         if richtext_json:
-            data |= {"richtext_json": dumps(richtext_json, separators=(":", ","))}
+            data |= {"richtext_json": dumps(richtext_json, separators=(",", ":"))}
 
         return self._request("POST", "api/comment", data=data)
 
@@ -236,11 +236,11 @@ class OAuth2Client:
     def editusertext(self, thing_id: str, text: str | None = None,
                      richtext_json: dict | None = None):
         assert text or richtext_json
-        data = {"api_type": "json", "return_rtjson": bool(richtext_json), "text": text or "",
+        data = {"api_type": "json", "return_rtjson": richtext_json is not None, "text": text or "",
                 "thing_id": thing_id}
 
         if richtext_json:
-            data |= {"richtext_json": dumps(richtext_json, separators=(":", ","))}
+            data |= {"richtext_json": dumps(richtext_json, separators=(",", ":"))}
 
         return self._request("POST", "api/editusertext", data=data)
 
@@ -347,9 +347,9 @@ class OAuth2Client:
         else:
             data = {"token": self.__token["access_token"], "token_type_hint": "access_token"}
 
-        res = self.__client.post(f"{BASE_URL}/{REVOKE_TOKEN_URL}", data=data,
-                                 auth=BasicAuth(username=self.__client_id,
-                                                password=self.__client_secret or ""))
+        res = OAuth2Client.__CLIENT.post(f"{BASE_URL}/{REVOKE_TOKEN_URL}", data=data,
+                                         auth=BasicAuth(username=self.__client_id,
+                                                        password=self.__client_secret or ""))
 
         if res.status_code >= 400:
             raise RESTException(res)
@@ -416,7 +416,7 @@ class OAuth2Client:
         data: Submission = res.json()
         return data
 
-    def submit_selftext(self, title: str, subreddit: str, text: str | None = None,
+    def submit_selftext(self, title: str, text: str | None = None, subreddit: str | None = None,
                         nsfw: bool = False, resubmit: bool = True, send_replies: bool = False,
                         spoiler: bool = False, collection_id: str | None = None,
                         flair_id: str | None = None, flair_text: str | None = None,
@@ -424,7 +424,7 @@ class OAuth2Client:
                         event_start: str | None = None, event_tz: str | None = None,
                         g_recaptcha_response: str | None = None,
                         richtext_json: dict | None = None):
-        res = self._submit(SubmitKind.SELF, title, subreddit, text=text, nsfw=nsfw,
+        res = self._submit(SubmitKind.SELF, title, subreddit=subreddit, text=text, nsfw=nsfw,
                            resubmit=resubmit, send_replies=send_replies, spoiler=spoiler,
                            collection_id=collection_id, flair_id=flair_id, flair_text=flair_text,
                            discussion_type=discussion_type, event_end=event_end,
