@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+from json import dumps
 from random import choice
 from string import ascii_letters, digits
 from typing import Literal
@@ -8,9 +9,9 @@ from webbrowser import open as webbrowser_open
 
 from httpx import BasicAuth, Client
 
-from ._const import ACCESS_TOKEN_URL, BASE_URL, OAUTH_URL, REVOKE_TOKEN_URL, USER_AGENT
+from ._const import ACCESS_TOKEN_URL, BASE_URL, OAUTH_URL, REVOKE_TOKEN_URL, SCOPES_URL, USER_AGENT
 from ._exception import OAuth2ExpiredTokenException, OAuth2RevokedTokenException, RESTException
-from ._type import OAuth2Token, RateLimit
+from ._type import CommentsSort, ListingSort, Me, OAuth2Scopes, OAuth2Token, RateLimit
 from ._utils import OAuth2WSGICodeFlowExchangeServer
 
 try:
@@ -148,6 +149,62 @@ class OAuth2Client:
         return cls.authorization_code_grant(wsgi_server.code, client_id, redirect_uri,
                                             client_secret=client_secret)
 
+    def comment(self, thing_id: str, text: str | None = None, richtext_json: dict | None = None):
+        assert text or richtext_json
+        data = {"api_type": "json", "return_rtjson": bool(richtext_json), "text": text or "",
+                "thing_id": thing_id}
+
+        if richtext_json:
+            data |= {"richtext_json": dumps(richtext_json, separators=(":", ","))}
+
+        return self._request("POST", "api/comment", data=data)
+
+    def comments(self, post_id: str, sort: CommentsSort = CommentsSort.CONFIDENCE,
+                 subreddit: str | None = None, comment: str | None = None,
+                 context: int | None = None, depth: int | None = None, limit: int | None = None,
+                 showedits: bool | None = None, showmedia: bool | None = None,
+                 showmore: bool | None = None, showtitle: bool | None = None,
+                 threaded: bool | None = None, truncate: int | None = None):
+        params = {"sort": sort}
+
+        for key, value in (
+            ("comment", comment),
+            ("context", context),
+            ("depth", depth),
+            ("limit", limit),
+            ("showedits", showedits),
+            ("showmedia", showmedia),
+            ("showmore", showmore),
+            ("showtitle", showtitle),
+            ("threaded", threaded),
+            ("truncate", truncate),
+        ):
+            if value is not None:
+                params |= {key: value}
+
+        if subreddit is not None:
+            return self._request("GET", f"comments/{post_id}", params=params)
+
+        return self._request("GET", f"r/{subreddit}/comments/{post_id}", params=params)
+
+    def convert_rte_body(self, md_text: str):
+        return self._request("POST", "api/convert_rte_body_format",
+                             data={"output_mode": "rtjson", "markdown_text": md_text})
+
+    def delete_thing(self, thing_id: str):
+        return self._request("POST", "api/del", data={"id": thing_id})
+
+    def editusertext(self, thing_id: str, text: str | None = None,
+                     richtext_json: dict | None = None):
+        assert text or richtext_json
+        data = {"api_type": "json", "return_rtjson": bool(richtext_json), "text": text or "",
+                "thing_id": thing_id}
+
+        if richtext_json:
+            data |= {"richtext_json": dumps(richtext_json, separators=(":", ","))}
+
+        return self._request("POST", "api/editusertext", data=data)
+
     @property
     def expired(self):
         if not self.expiry:
@@ -161,6 +218,27 @@ class OAuth2Client:
             return
 
         return self.__token_issued_at + timedelta(seconds=self.__token["expires_in"])
+
+    def info(self, ids: list[str] | None = None, sr_names: list[str] | None = None,
+             url: str | None = None, subreddit: str | None = None):
+        params = None
+
+        if ids is not None or sr_names is not None or url is not None:
+            params = {}
+
+            if ids is not None:
+                params |= {"id": ",".join(ids)}
+
+            if sr_names is not None:
+                params |= {"sr_name": ",".join(sr_names)}
+
+            if url is not None:
+                params |= {"url": url}
+
+        if subreddit is not None:
+            return self._request("GET", f"r/{subreddit}/api/info", params=params)
+
+        return self._request("GET", "api/info", params=params)
 
     @classmethod
     def installed_client_grant(cls, client_id: str, device_id: str | None = None,
@@ -180,6 +258,12 @@ class OAuth2Client:
         token_issued_at = parsedate_to_datetime(res.headers["Date"])
 
         return cls(client_id, token, token_issued_at=token_issued_at, client_secret=client_secret)
+
+    @property
+    def me(self):
+        me_res = self._request("GET", "api/v1/me")
+        me_data: Me = me_res.json()
+        return me_data
 
     @classmethod
     def password_grant(cls, client_id: str, username: str, password: str,
@@ -205,6 +289,18 @@ class OAuth2Client:
 
         return cls(client_id, token, token_issued_at=token_issued_at, client_secret=client_secret)
 
+    def posts(self, subreddit: str | None = None, sort: ListingSort = ListingSort.BEST,
+              before: str | None = None, limit: int | None = None):
+        params = {}
+
+        if before:
+            params |= {"before": before}
+
+        if limit:
+            params |= {"limit": limit}
+
+        return self._request("GET", f"r/{subreddit}/{sort}" if subreddit else sort, params=params)
+
     def revoke(self):
         if "refresh_token" in self.__token:
             data = {"token": self.__token["refresh_token"], "token_type_hint": "refresh_token"}
@@ -220,3 +316,16 @@ class OAuth2Client:
             raise RESTException(res)
 
         raise OAuth2RevokedTokenException(self.__token)
+
+    def sendreplies(self, thing_id: str, state: bool):
+        return self._request("POST", "api/sendreplies", data={"id": thing_id, "state": state})
+
+    @staticmethod
+    def scopes():
+        res = OAuth2Client.__CLIENT.get(f"{BASE_URL}/{SCOPES_URL}")
+
+        if res.status_code >= 400:
+            raise RESTException(res)
+
+        scopes: OAuth2Scopes = res.json()
+        return scopes
