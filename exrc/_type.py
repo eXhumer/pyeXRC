@@ -114,6 +114,21 @@ class RateLimit(TypedDict):
     Used: int
 
 
+class Submission(TypedDict):
+    json: SubmissionJSON
+
+
+class SubmissionData(TypedDict):
+    url: str
+    drafts_count: NotRequired[int]
+    id: str
+    name: NotRequired[str]
+
+
+class SubmissionJSON(TypedDict):
+    data: SubmissionData
+
+
 class SubmitKind(StrEnum):
     IMAGE = "image"
     LINK = "link"

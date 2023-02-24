@@ -11,7 +11,8 @@ from httpx import BasicAuth, Client
 
 from ._const import ACCESS_TOKEN_URL, BASE_URL, OAUTH_URL, REVOKE_TOKEN_URL, SCOPES_URL, USER_AGENT
 from ._exception import OAuth2ExpiredTokenException, OAuth2RevokedTokenException, RESTException
-from ._type import CommentsSort, ListingSort, Me, OAuth2Scopes, OAuth2Token, RateLimit, SubmitKind
+from ._type import CommentsSort, ListingSort, Me, OAuth2Scopes, OAuth2Token, RateLimit, \
+    Submission, SubmitKind
 from ._utils import OAuth2WSGICodeFlowExchangeServer
 
 try:
@@ -90,17 +91,20 @@ class OAuth2Client:
 
         return res
 
-    def _submit(self, kind: SubmitKind, subreddit: str, title: str, text: str | None = None,
-                url: str | None = None, video_poster_url: str | None = None, nsfw: bool = False,
-                resubmit: bool = True, send_replies: bool = False, spoiler: bool = False,
+    def _submit(self, kind: SubmitKind, title: str, subreddit: str | None = None,
+                text: str | None = None, url: str | None = None,
+                video_poster_url: str | None = None, nsfw: bool = False, resubmit: bool = True,
+                send_replies: bool = False, spoiler: bool = False,
                 collection_id: str | None = None, flair_id: str | None = None,
                 flair_text: str | None = None, discussion_type: str | None = None,
                 event_end: str | None = None, event_start: str | None = None,
                 event_tz: str | None = None, g_recaptcha_response: str | None = None,
                 richtext_json: dict | None = None):
+        assert not (bool(text) and bool(richtext_json))
+
         data = {"api_type": "json", "nsfw": nsfw, "resubmit": resubmit,
-                "sendreplies": send_replies, "spoiler": spoiler, "sr": subreddit, "title": title,
-                "kind": kind}
+                "sendreplies": send_replies, "spoiler": spoiler, "title": title, "kind": kind,
+                "submit_type": "subreddit" if subreddit else "profile"}
 
         for key, value in (
             ("flair_id", flair_id),
@@ -115,6 +119,7 @@ class OAuth2Client:
             ("text", text),
             ("url", url),
             ("richtext_json", richtext_json),
+            ("sr", subreddit),
         ):
             if value is not None:
                 if key == "richtext_json":
@@ -363,3 +368,68 @@ class OAuth2Client:
 
         scopes: OAuth2Scopes = res.json()
         return scopes
+
+    def submit_link(self, title: str, url: str, nsfw: bool = False, resubmit: bool = True,
+                    send_replies: bool = False, spoiler: bool = False,
+                    subreddit: str | None = None, collection_id: str | None = None,
+                    flair_id: str | None = None, flair_text: str | None = None,
+                    discussion_type: str | None = None, event_end: str | None = None,
+                    event_start: str | None = None, event_tz: str | None = None,
+                    g_recaptcha_response: str | None = None):
+        res = self._submit(SubmitKind.LINK, title, subreddit=subreddit, url=url, nsfw=nsfw,
+                           resubmit=resubmit, send_replies=send_replies, spoiler=spoiler,
+                           collection_id=collection_id, flair_id=flair_id, flair_text=flair_text,
+                           discussion_type=discussion_type, event_end=event_end,
+                           event_start=event_start, event_tz=event_tz,
+                           g_recaptcha_response=g_recaptcha_response)
+
+        data: Submission = res.json()
+        return data
+
+    def submit_poll(self, title: str, selftext: str, options: list[str], duration: int,
+                    subreddit: str | None = None, flair_id: str | None = None,
+                    flair_text: str | None = None, resubmit: bool = True,
+                    send_replies: bool = False, nsfw: bool = False, spoiler: bool = False,
+                    collection_id: str | None = None, discussion_type: str | None = None,
+                    event_end: str | None = None, event_start: str | None = None,
+                    event_tz: str | None = None, g_recaptcha_response: str | None = None):
+        data = {"text": selftext, "options": options, "duration": duration, "resubmit": resubmit,
+                "sendreplies": send_replies, "title": title, "nsfw": nsfw, "spoiler": spoiler,
+                "submit_type": "subreddit" if subreddit else "profile"}
+
+        for key, value in (
+            ("flair_id", flair_id),
+            ("flair_text", flair_text),
+            ("collection_id", collection_id),
+            ("discussion_type", discussion_type),
+            ("event_end", event_end),
+            ("event_start", event_start),
+            ("event_tz", event_tz),
+            ("g-recaptcha-response", g_recaptcha_response),
+            ("sr", subreddit),
+        ):
+            if value is not None:
+                data |= {key: value}
+
+        res = self._request("POST", "api/submit_poll_post", json=data)
+
+        data: Submission = res.json()
+        return data
+
+    def submit_selftext(self, title: str, subreddit: str, text: str | None = None,
+                        nsfw: bool = False, resubmit: bool = True, send_replies: bool = False,
+                        spoiler: bool = False, collection_id: str | None = None,
+                        flair_id: str | None = None, flair_text: str | None = None,
+                        discussion_type: str | None = None, event_end: str | None = None,
+                        event_start: str | None = None, event_tz: str | None = None,
+                        g_recaptcha_response: str | None = None,
+                        richtext_json: dict | None = None):
+        res = self._submit(SubmitKind.SELF, title, subreddit, text=text, nsfw=nsfw,
+                           resubmit=resubmit, send_replies=send_replies, spoiler=spoiler,
+                           collection_id=collection_id, flair_id=flair_id, flair_text=flair_text,
+                           discussion_type=discussion_type, event_end=event_end,
+                           event_start=event_start, event_tz=event_tz,
+                           g_recaptcha_response=g_recaptcha_response, richtext_json=richtext_json)
+
+        data: Submission = res.json()
+        return data
