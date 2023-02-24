@@ -114,6 +114,14 @@ class RateLimit(TypedDict):
     Used: int
 
 
+class SubmitKind(StrEnum):
+    IMAGE = "image"
+    LINK = "link"
+    SELF = "self"
+    VIDEO = "video"
+    VIDEO_GIF = "videogif"
+
+
 class Subreddit(TypedDict):
     accept_followers: bool
     banner_img: str

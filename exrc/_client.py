@@ -11,7 +11,7 @@ from httpx import BasicAuth, Client
 
 from ._const import ACCESS_TOKEN_URL, BASE_URL, OAUTH_URL, REVOKE_TOKEN_URL, SCOPES_URL, USER_AGENT
 from ._exception import OAuth2ExpiredTokenException, OAuth2RevokedTokenException, RESTException
-from ._type import CommentsSort, ListingSort, Me, OAuth2Scopes, OAuth2Token, RateLimit
+from ._type import CommentsSort, ListingSort, Me, OAuth2Scopes, OAuth2Token, RateLimit, SubmitKind
 from ._utils import OAuth2WSGICodeFlowExchangeServer
 
 try:
@@ -89,6 +89,40 @@ class OAuth2Client:
             raise RESTException(res)
 
         return res
+
+    def _submit(self, kind: SubmitKind, subreddit: str, title: str, text: str | None = None,
+                url: str | None = None, video_poster_url: str | None = None, nsfw: bool = False,
+                resubmit: bool = True, send_replies: bool = False, spoiler: bool = False,
+                collection_id: str | None = None, flair_id: str | None = None,
+                flair_text: str | None = None, discussion_type: str | None = None,
+                event_end: str | None = None, event_start: str | None = None,
+                event_tz: str | None = None, g_recaptcha_response: str | None = None,
+                richtext_json: dict | None = None):
+        data = {"api_type": "json", "nsfw": nsfw, "resubmit": resubmit,
+                "sendreplies": send_replies, "spoiler": spoiler, "sr": subreddit, "title": title,
+                "kind": kind}
+
+        for key, value in (
+            ("flair_id", flair_id),
+            ("flair_text", flair_text),
+            ("collection_id", collection_id),
+            ("discussion_type", discussion_type),
+            ("event_end", event_end),
+            ("event_start", event_start),
+            ("event_tz", event_tz),
+            ("g-recaptcha-response", g_recaptcha_response),
+            ("video_poster_url", video_poster_url),
+            ("text", text),
+            ("url", url),
+            ("richtext_json", richtext_json),
+        ):
+            if value is not None:
+                if key == "richtext_json":
+                    dumps(value, separators=(":", ","))
+
+                data |= {key: value}
+
+        return self._request("POST", "api/submit", data=data)
 
     @property
     def authorization(self):
