@@ -1,17 +1,24 @@
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from json import dumps
+from io import BytesIO
+from json import dumps, loads
+from mimetypes import guess_type
 from random import choice
 from string import ascii_letters, digits
-from typing import Literal
+from typing import IO, Literal
 from urllib.parse import urlparse
 from webbrowser import open as webbrowser_open
+from xml.etree.ElementTree import parse as xml_parse
 
 from httpx import BasicAuth, Client
+from websocket import create_connection, WebSocketTimeoutException
 
-from ._const import ACCESS_TOKEN_URL, BASE_URL, OAUTH_URL, REVOKE_TOKEN_URL, SCOPES_URL, USER_AGENT
+from ._const import ACCESS_TOKEN_URL, BASE_URL, OAUTH_URL, REVOKE_TOKEN_URL, SCOPES_URL, \
+    USER_AGENT, VIDEO_POSTER
 from ._exception import OAuth2ExpiredTokenException, OAuth2RevokedTokenException, RESTException
-from ._type import CommentsSort, ListingSort, Me, OAuth2Scopes, OAuth2Token, RateLimit, \
+from ._type import CommentsSort, GalleryImage, ListingSort, Me, MediaAsset, MediaAssetUploadData, \
+    MediaKind, MediaSubmission, MediaSubmissionUpdate, OAuth2Scopes, OAuth2Token, RateLimit, \
     Submission, SubmitKind
 from ._utils import OAuth2WSGICodeFlowExchangeServer
 
@@ -35,6 +42,26 @@ class OAuth2Client:
         self.__client_secret = client_secret
         self.__token = token
         self.__token_issued_at = token_issued_at
+
+    def _create_media_asset(self, media_filename: str, media_mimetype: str):
+        res = self._request("POST", "api/media/asset", data={"filepath": media_filename,
+                                                             "mimetype": media_mimetype})
+        media_asset: MediaAsset = res.json()
+        return media_asset
+
+    def _media_asset_status(self, media_ws_url: str):
+        media_ws = create_connection(media_ws_url, timeout=1)
+
+        with closing(media_ws):
+            while True:
+                try:
+                    ws_update: MediaSubmissionUpdate = loads(media_ws.recv())
+                    break
+
+                except (TimeoutError, WebSocketTimeoutException):
+                    continue
+
+        return ws_update
 
     def _refresh(self):
         assert "refresh_token" in self.__token
@@ -128,6 +155,71 @@ class OAuth2Client:
                 data |= {key: value}
 
         return self._request("POST", "api/submit", data=data)
+
+    def _submit_media(self, kind: MediaKind, title: str, media_stream: IO[bytes],
+                      media_filename: str, nsfw: bool = False, resubmit: bool = True,
+                      send_replies: bool = False, spoiler: bool = False,
+                      subreddit: str | None = None, collection_id: str | None = None,
+                      flair_id: str | None = None, flair_text: str | None = None,
+                      discussion_type: str | None = None, event_end: str | None = None,
+                      event_start: str | None = None, event_tz: str | None = None,
+                      video_poster_url: str | None = None,
+                      g_recaptcha_response: str | None = None):
+        if kind in [MediaKind.VIDEO, MediaKind.VIDEO_GIF]:
+            assert video_poster_url is not None
+
+        media_mimetype = guess_type(media_filename)[0]
+        assert media_mimetype is not None
+
+        if kind == MediaKind.IMAGE:
+            assert media_mimetype.startswith("image/")
+
+        elif kind == MediaKind.VIDEO_GIF:
+            assert media_mimetype == "image/gif" or media_mimetype.startswith("video/")
+
+        else:
+            assert media_mimetype.startswith("video/")
+
+        media_asset = self._create_media_asset(media_filename, media_mimetype)
+
+        media_asset_url = \
+            self._upload_media_asset(media_filename, media_stream, media_asset, media_mimetype)[0]
+
+        res = self._submit(kind, title, url=media_asset_url, nsfw=nsfw, resubmit=resubmit,
+                           send_replies=send_replies, spoiler=spoiler, subreddit=subreddit,
+                           collection_id=collection_id, flair_id=flair_id, flair_text=flair_text,
+                           discussion_type=discussion_type, event_end=event_end,
+                           event_start=event_start, event_tz=event_tz,
+                           video_poster_url=video_poster_url,
+                           g_recaptcha_response=g_recaptcha_response)
+
+        media_submission: MediaSubmission = res.json()
+
+        return media_submission
+
+    def _upload_media_asset(self, media_filename: str, media_stream: IO[bytes],
+                            media_asset: MediaAsset, media_mimetype: str):
+        media_asset_upload_url = f"https:{media_asset['args']['action']}"
+        asset_id = media_asset["asset"]["asset_id"]
+        data = {item["name"]: item["value"] for item in media_asset["args"]["fields"]}
+        media_asset_url = f"{media_asset_upload_url}/{data['key']}"
+
+        res = OAuth2Client.__CLIENT.post(media_asset_upload_url, data=data,
+                                         files={"file": (media_filename, media_stream,
+                                                         media_mimetype)})
+
+        if res.status_code >= 400:
+            raise RESTException(res)
+
+        action_xml = xml_parse(BytesIO(res.content))
+        post_response = action_xml.getroot()
+
+        upload_data: MediaAssetUploadData = {}
+
+        for element in post_response:
+            upload_data |= {element.tag: element.text}
+
+        return media_asset_url, asset_id, upload_data
 
     @property
     def authorization(self):
@@ -369,6 +461,83 @@ class OAuth2Client:
         scopes: OAuth2Scopes = res.json()
         return scopes
 
+    def submit_gallery(self, title: str,
+                       images: list[tuple[IO[bytes], str, str | None, str | None]],
+                       nsfw: bool = False, send_replies: bool = False, spoiler: bool = False,
+                       subreddit: str | None = None, collection_id: str | None = None,
+                       flair_id: str | None = None, flair_text: str | None = None,
+                       discussion_type: str | None = None, event_end: str | None = None,
+                       event_start: str | None = None, event_tz: str | None = None,
+                       g_recaptcha_response: str | None = None):
+        data = {
+            "api_type": "json",
+            "nsfw": nsfw,
+            "sendreplies": send_replies,
+            "show_error_list": True,
+            "spoiler": spoiler,
+            "title": title,
+        }
+
+        for key, value in (
+            ("flair_id", flair_id),
+            ("flair_text", flair_text),
+            ("collection_id", collection_id),
+            ("discussion_type", discussion_type),
+            ("event_end", event_end),
+            ("event_start", event_start),
+            ("event_tz", event_tz),
+            ("sr", subreddit),
+            ("g_recaptcha_response", g_recaptcha_response),
+        ):
+            if value is not None:
+                data[key] = value
+
+        items: list[GalleryImage] = []
+
+        for image_stream, image_filename, caption, outbound_url in images:
+            image_mimetype = guess_type(image_filename)[0]
+            assert image_mimetype is not None and image_mimetype.startswith("image/")
+            image_asset = self._create_media_asset(image_filename, image_mimetype)
+            media_id = \
+                self._upload_media_asset(image_filename, image_stream, image_asset,
+                                         image_mimetype)[1]
+            items.append(GalleryImage(caption=caption or "", outbound_url=outbound_url or "",
+                                      media_id=media_id))
+
+        data |= {"items": items}
+
+        return self._request("POST", "api/submit_gallery_post", json=data)
+
+    def submit_image(self, title: str, image_stream: IO[bytes], filename: str, nsfw: bool = False,
+                     resubmit: bool = True, send_replies: bool = False, spoiler: bool = False,
+                     subreddit: str | None = None, collection_id: str | None = None,
+                     flair_id: str | None = None, flair_text: str | None = None,
+                     discussion_type: str | None = None, event_end: str | None = None,
+                     event_start: str | None = None, event_tz: str | None = None,
+                     g_recaptcha_response: str | None = None, wait_for_ws_update: bool = True):
+        media_submission = self._submit_media(MediaKind.IMAGE, title, image_stream, filename,
+                                              nsfw=nsfw, resubmit=resubmit,
+                                              send_replies=send_replies, spoiler=spoiler,
+                                              subreddit=subreddit, collection_id=collection_id,
+                                              flair_id=flair_id, flair_text=flair_text,
+                                              discussion_type=discussion_type, event_end=event_end,
+                                              event_start=event_start, event_tz=event_tz,
+                                              video_poster_url=None,
+                                              g_recaptcha_response=g_recaptcha_response)
+
+        if "websocket_url" in media_submission["json"]["data"] and wait_for_ws_update is True:
+            try:
+                websocket_url = media_submission["json"]["data"]["websocket_url"]
+                media_asset_status = self._media_asset_status(websocket_url)
+
+            except KeyboardInterrupt:
+                media_asset_status = None
+
+        else:
+            media_asset_status = None
+
+        return media_submission, media_asset_status
+
     def submit_link(self, title: str, url: str, nsfw: bool = False, resubmit: bool = True,
                     send_replies: bool = False, spoiler: bool = False,
                     subreddit: str | None = None, collection_id: str | None = None,
@@ -433,3 +602,55 @@ class OAuth2Client:
 
         data: Submission = res.json()
         return data
+
+    def submit_video(self, title: str, stream: IO[bytes], filename: str, nsfw: bool = False,
+                     resubmit: bool = True, send_replies: bool = False, spoiler: bool = False,
+                     subreddit: str | None = None, collection_id: str | None = None,
+                     flair_id: str | None = None, flair_text: str | None = None,
+                     discussion_type: str | None = None, event_end: str | None = None,
+                     event_start: str | None = None, event_tz: str | None = None,
+                     g_recaptcha_response: str | None = None, wait_for_ws_update: bool = True,
+                     is_gif: bool = False, poster_stream: IO[bytes] | None = None,
+                     poster_filename: str | None = None, poster_url: str | None = None):
+        if poster_url:
+            assert poster_stream is None and poster_filename is None
+
+        else:
+            poster_stream = poster_stream or VIDEO_POSTER
+
+            if poster_stream == VIDEO_POSTER:
+                poster_filename = "image.png"
+
+            else:
+                assert poster_filename is not None
+
+            poster_mimetype = guess_type(poster_filename)[0]
+            assert poster_mimetype is not None and poster_mimetype.startswith("image/")
+
+            poster_media_asset = self._create_media_asset(poster_filename, poster_mimetype)
+            poster_url = self._upload_media_asset(poster_filename, poster_stream,
+                                                  poster_media_asset, poster_mimetype)[0]
+
+        media_submission = self._submit_media(MediaKind.VIDEO_GIF if is_gif else MediaKind.VIDEO,
+                                              title, stream, filename, nsfw=nsfw,
+                                              resubmit=resubmit, send_replies=send_replies,
+                                              spoiler=spoiler, subreddit=subreddit,
+                                              collection_id=collection_id, flair_id=flair_id,
+                                              flair_text=flair_text,
+                                              discussion_type=discussion_type, event_end=event_end,
+                                              event_start=event_start, event_tz=event_tz,
+                                              video_poster_url=poster_url,
+                                              g_recaptcha_response=g_recaptcha_response)
+
+        if "websocket_url" in media_submission["json"]["data"] and wait_for_ws_update is True:
+            try:
+                media_asset_status = self._media_asset_status(
+                    media_submission["json"]["data"]["websocket_url"])
+
+            except KeyboardInterrupt:
+                media_asset_status = None
+
+        else:
+            media_asset_status = None
+
+        return media_submission, media_asset_status

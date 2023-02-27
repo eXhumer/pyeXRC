@@ -16,6 +16,12 @@ class CommentsSort(StrEnum):
     BLANK = "blank"
 
 
+class GalleryImage(TypedDict):
+    caption: str
+    outbound_url: str
+    media_id: str
+
+
 class ListingSort(StrEnum):
     BEST = "best"
     HOT = "hot"
@@ -88,6 +94,62 @@ class Me(TypedDict):
     suspension_expiration_utc: int | None
     total_karma: int
     verified: bool
+
+
+class MediaAsset(TypedDict):
+    args: MediaAssetArgs
+    asset: MediaAssetAsset
+
+
+class MediaAssetArgs(TypedDict):
+    action: str
+    fields: list[dict[Literal["name", "value"], str]]
+
+
+class MediaAssetAsset(TypedDict):
+    asset_id: str
+    processing_state: str
+    payload: MediaAssetAssetPayload
+    websocket_url: str
+
+
+class MediaAssetAssetPayload(TypedDict):
+    filepath: str
+
+
+class MediaAssetUploadData(TypedDict):
+    Location: str
+    Bucket: str
+    Key: str
+    ETag: str
+
+
+class MediaKind(StrEnum):
+    IMAGE = "image"
+    VIDEO = "video"
+    VIDEO_GIF = "videogif"
+
+
+class MediaSubmission(TypedDict):
+    json: MediaSubmissionJSON
+
+
+class MediaSubmissionJSON(TypedDict):
+    errors: list
+    data: MediaSubmissionJSONData
+
+
+class MediaSubmissionJSONData(TypedDict):
+    redirect: str
+
+
+class MediaSubmissionUpdate(TypedDict):
+    type: str
+    payload: MediaSubmissionUpdatePayload
+
+
+class MediaSubmissionUpdatePayload(TypedDict):
+    redirect: str
 
 
 class OAuth2Scope(TypedDict):
