@@ -14,9 +14,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
-from datetime import datetime
 from enum import StrEnum
-from typing import Literal, NotRequired, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 
 class CommentsSort(StrEnum):
@@ -35,6 +34,148 @@ class GalleryImage(TypedDict):
     caption: str
     outbound_url: str
     media_id: str
+
+
+class Thing(TypedDict):
+    kind: str
+    data: Any
+
+
+class LinkData(TypedDict):
+    all_awardings: list[Any]
+    allow_live_comments: bool
+    approved: NotRequired[bool]
+    approved_at_utc: int | None
+    approved_by: str | None
+    archived: bool
+    author: str
+    author_flair_background_color: str | None
+    author_flair_css_class: str | None
+    author_flair_richtext: list[Any]
+    author_flair_template_id: str | None
+    author_flair_text: str | None
+    author_flair_text_color: str | None
+    author_flair_type: str
+    author_fullname: str
+    author_is_blocked: bool
+    author_patreon_flair: bool
+    author_premium: bool
+    awarders: list[Any]
+    banned_at_utc: int | None
+    banned_by: str | None
+    can_gild: bool
+    can_mod_post: bool
+    category: str | None
+    clicked: bool
+    content_categories: None
+    contest_mode: bool
+    created: int
+    created_utc: int
+    discussion_type: str | None
+    distinguished: str | None
+    domain: str
+    downs: int
+    edited: bool
+    gilded: int
+    gildings: dict[str, Any]
+    hidden: bool
+    hide_score: bool
+    id: str
+    ignore_reports: NotRequired[bool]
+    is_created_from_ads_ui: bool
+    is_crosspostable: bool
+    is_meta: bool
+    is_original_content: bool
+    is_reddit_media_domain: bool
+    is_robot_indexable: bool
+    is_self: bool
+    is_video: bool
+    likes: bool | None
+    link_flair_background_color: str
+    link_flair_css_class: str | None
+    link_flair_richtext: list[dict[str, str]]
+    link_flair_template_id: NotRequired[str]
+    link_flair_text: str | None
+    link_flair_text_color: str
+    link_flair_type: str
+    locked: bool
+    media: dict[str, Any] | None
+    media_embed: dict[str, Any]
+    media_only: bool
+    mod_note: str | None
+    mod_reason_by: str | None
+    mod_reason_title: str | None
+    mod_reports: list[Any]
+    name: str
+    no_follow: bool
+    num_comments: int
+    num_crossposts: int
+    num_duplicates: int
+    num_reports: int | None
+    over_18: bool
+    parent_whitelist_status: None
+    permalink: str
+    pinned: bool
+    post_hint: NotRequired[str]
+    preview: NotRequired[dict[str, Any]]
+    pwls: None
+    quarantine: bool
+    removal_reason: str | None
+    removed: NotRequired[bool]
+    removed_by: str | None
+    removed_by_category: str | None
+    report_reasons: list[Any] | None
+    rte_mode: NotRequired[str]
+    saved: bool
+    score: int
+    secure_media: dict[str, Any] | None
+    secure_media_embed: dict[str, Any]
+    selftext: str
+    selftext_html: str | None
+    send_replies: bool
+    spam: NotRequired[bool]
+    spoiler: bool
+    stickied: bool
+    subreddit: str
+    subreddit_id: str
+    subreddit_name_prefixed: str
+    subreddit_subscribers: int
+    subreddit_type: str
+    suggested_sort: str | None
+    thumbnail: str
+    thumbnail_height: int | None
+    thumbnail_width: int | None
+    title: str
+    top_awarded_type: None
+    total_awards_received: int
+    treatment_tags: list[Any]
+    ups: int
+    upvote_ratio: int | float
+    url: str
+    url_overridden_by_dest: NotRequired[str]
+    user_reports: list[Any]
+    view_count: int | None
+    visited: bool
+    whitelist_status: None
+    wls: None
+
+
+class LinkThing(Thing):
+    data: LinkData
+
+
+class Listing(Thing):
+    kind: Literal["Listing"]
+    data: ListingData
+
+
+class ListingData(TypedDict):
+    after: str | None
+    dist: int | None
+    modhash: str
+    geo_filter: str
+    children: list[Thing]
+    before: str | None
 
 
 class ListingSort(StrEnum):
@@ -186,8 +327,8 @@ class OAuth2Token(TypedDict):
 
 
 class RateLimit(TypedDict):
-    Remaining: float
-    Reset: datetime
+    Remaining: int
+    Reset: str
     Used: int
 
 

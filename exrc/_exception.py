@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from httpx import Response
 
@@ -44,10 +44,24 @@ class OAuth2RevokedTokenException(OAuth2TokenException):
         return self.__token
 
 
+class RateLimitException(Exception):
+    def __init__(self, reset: datetime):
+        self.__reset = reset
+        super().__init__(f"Rate limited until {reset.isoformat()}!")
+
+    @property
+    def seconds_until_reset(self):
+        if self.__reset > datetime.now(tz=timezone.utc):
+            return int((self.__reset - datetime.now(tz=timezone.utc)).total_seconds())
+
+        return 0
+
+
 class RESTException(Exception):
     def __init__(self, res: Response):
         self.__res = res
-        super().__init__(f"REST exception occurred with status code {res.status_code}!")
+        super().__init__(f"REST exception occurred with status code {res.status_code}!\n" +
+                         f"Response: {res.request.read()}")
 
     @property
     def response(self):

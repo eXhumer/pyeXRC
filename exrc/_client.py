@@ -31,7 +31,8 @@ from websocket import create_connection, WebSocketTimeoutException
 
 from ._const import ACCESS_TOKEN_URL, BASE_URL, OAUTH_URL, REVOKE_TOKEN_URL, SCOPES_URL, \
     USER_AGENT, VIDEO_POSTER
-from ._exception import OAuth2ExpiredTokenException, OAuth2RevokedTokenException, RESTException
+from ._exception import OAuth2ExpiredTokenException, OAuth2RevokedTokenException, \
+    RateLimitException, RESTException
 from ._type import CommentsSort, GalleryImage, ListingSort, Me, MediaAsset, MediaAssetUploadData, \
     MediaKind, MediaSubmission, MediaSubmissionUpdate, OAuth2Scopes, OAuth2Token, RateLimit, \
     Submission, SubmitKind
@@ -45,18 +46,21 @@ except ImportError:
 
 
 class OAuth2Client:
-    __CLIENT = Client(http2=h2_available)
-    __CLIENT.headers["User-Agent"] = USER_AGENT
-    __CLIENT.base_url = OAUTH_URL
-    __CLIENT.follow_redirects = True
+    __CLIENT = None
     __RATE_LIMIT = None
 
     def __init__(self, client_id: str, token: OAuth2Token, token_issued_at: datetime | None = None,
-                 client_secret: str | None = None):
+                 client_secret: str | None = None, user_agent: str | None = None):
+        if OAuth2Client.__CLIENT is None:
+            OAuth2Client.__CLIENT = Client(http2=h2_available)
+            OAuth2Client.__CLIENT.base_url = OAUTH_URL
+            OAuth2Client.__CLIENT.follow_redirects = True
+
         self.__client_id = client_id
         self.__client_secret = client_secret
         self.__token = token
         self.__token_issued_at = token_issued_at
+        self.__user_agent = user_agent
 
     def _create_media_asset(self, media_filename: str, media_mimetype: str):
         res = self._request("POST", "api/media/asset", data={"filepath": media_filename,
@@ -84,6 +88,7 @@ class OAuth2Client:
         res = OAuth2Client.__CLIENT.post(f"{BASE_URL}/{ACCESS_TOKEN_URL}",
                                          data={"grant_type": "refresh_token",
                                                "refresh_token": self.__token["refresh_token"]},
+                                         headers={"User-Agent": self.__user_agent or USER_AGENT},
                                          auth=BasicAuth(username=self.__client_id,
                                                         password=self.__client_secret or ""))
 
@@ -115,11 +120,20 @@ class OAuth2Client:
         elif "raw_json" not in kwargs["params"]:
             kwargs["params"] |= {"raw_json": "1"}
 
+        if "headers" not in kwargs:
+            kwargs["headers"] = {"User-Agent": self.__user_agent or USER_AGENT}
+
+        else:
+            kwargs["headers"] |= {"User-Agent": self.__user_agent or USER_AGENT}
+
+        if OAuth2Client.__RATE_LIMIT is not None and OAuth2Client.__RATE_LIMIT["Remaining"] == 0:
+            raise RateLimitException(datetime.fromisoformat(OAuth2Client.__RATE_LIMIT["Reset"]))
+
         res = OAuth2Client.__CLIENT.request(method, url, **kwargs)
 
-        remaining = float(res.headers["X-RateLimit-Remaining"])
-        reset = datetime.now(tz=timezone.utc) + \
-            timedelta(seconds=int(res.headers["X-RateLimit-Reset"]))
+        remaining = int(res.headers["X-RateLimit-Remaining"].replace(".0", ""))
+        reset = (datetime.now(tz=timezone.utc) +
+                 timedelta(seconds=int(res.headers["X-RateLimit-Reset"]))).isoformat()
         used = int(res.headers["X-RateLimit-Used"])
 
         if OAuth2Client.__RATE_LIMIT is None:
@@ -129,7 +143,11 @@ class OAuth2Client:
             OAuth2Client.__RATE_LIMIT |= RateLimit(Remaining=remaining, Reset=reset, Used=used)
 
         if res.status_code >= 400:
-            raise RESTException(res)
+            if res.status_code == 429:
+                raise RESTException(res)
+
+            else:
+                raise RateLimitException(reset)
 
         return res
 
@@ -221,7 +239,8 @@ class OAuth2Client:
 
         res = OAuth2Client.__CLIENT.post(media_asset_upload_url, data=data,
                                          files={"file": (media_filename, media_stream,
-                                                         media_mimetype)})
+                                                         media_mimetype)},
+                                         headers={"User-Agent": self.__user_agent or USER_AGENT})
 
         if res.status_code >= 400:
             raise RESTException(res)
@@ -242,12 +261,18 @@ class OAuth2Client:
 
     @classmethod
     def authorization_code_grant(cls, code: str, client_id: str, redirect_uri: str,
-                                 client_secret: str | None = None):
+                                 client_secret: str | None = None, user_agent: str | None = None):
+        if OAuth2Client.__CLIENT is None:
+            OAuth2Client.__CLIENT = Client(http2=h2_available)
+            OAuth2Client.__CLIENT.base_url = OAUTH_URL
+            OAuth2Client.__CLIENT.follow_redirects = True
+
         res = OAuth2Client.__CLIENT.post(f"{BASE_URL}/{ACCESS_TOKEN_URL}",
                                          data={"code": code, "grant_type": "authorization_code",
                                                "redirect_uri": redirect_uri},
                                          auth=BasicAuth(username=client_id,
-                                                        password=client_secret or ""))
+                                                        password=client_secret or ""),
+                                         headers={"User-Agent": user_agent or USER_AGENT})
 
         if res.status_code >= 400:
             raise RESTException(res)
@@ -255,14 +280,22 @@ class OAuth2Client:
         token: OAuth2Token = res.json()
         token_issued_at = parsedate_to_datetime(res.headers["Date"])
 
-        return cls(client_id, token, token_issued_at=token_issued_at, client_secret=client_secret)
+        return cls(client_id, token, token_issued_at=token_issued_at, client_secret=client_secret,
+                   user_agent=user_agent)
 
     @classmethod
-    def client_credential_grant(cls, client_id: str, client_secret: str | None = None):
+    def client_credential_grant(cls, client_id: str, client_secret: str | None = None,
+                                user_agent: str | None = None):
+        if OAuth2Client.__CLIENT is None:
+            OAuth2Client.__CLIENT = Client(http2=h2_available)
+            OAuth2Client.__CLIENT.base_url = OAUTH_URL
+            OAuth2Client.__CLIENT.follow_redirects = True
+
         res = OAuth2Client.__CLIENT.post(f"{BASE_URL}/{ACCESS_TOKEN_URL}",
                                          data={"grant_type": "client_credentials"},
                                          auth=BasicAuth(username=client_id,
-                                                        password=client_secret or ""))
+                                                        password=client_secret or ""),
+                                         headers={"User-Agent": user_agent or USER_AGENT})
 
         if res.status_code >= 400:
             raise RESTException(res)
@@ -270,13 +303,15 @@ class OAuth2Client:
         token: OAuth2Token = res.json()
         token_issued_at = parsedate_to_datetime(res.headers["Date"])
 
-        return cls(client_id, token, token_issued_at=token_issued_at, client_secret=client_secret)
+        return cls(client_id, token, token_issued_at=token_issued_at, client_secret=client_secret,
+                   user_agent=user_agent)
 
     @classmethod
     def code_flow_localserver(cls, client_id: str, redirect_uri: str,
                               duration: Literal["temporary", "permanent"], scopes: list[str],
                               home_endpoint: str = "/", authorize_endpoint: str = "/authorize",
-                              state: str | None = None, client_secret: str | None = None):
+                              state: str | None = None, client_secret: str | None = None,
+                              user_agent: str | None = None):
         netloc = urlparse(redirect_uri).netloc
         netloc_parts = netloc.split(":", maxsplit=1)
         host = netloc_parts[0]
@@ -293,7 +328,7 @@ class OAuth2Client:
             wsgi_server.handle_request()
 
         return cls.authorization_code_grant(wsgi_server.code, client_id, redirect_uri,
-                                            client_secret=client_secret)
+                                            client_secret=client_secret, user_agent=user_agent)
 
     def comment(self, thing_id: str, text: str | None = None, richtext_json: dict | None = None):
         assert text or richtext_json
@@ -388,14 +423,20 @@ class OAuth2Client:
 
     @classmethod
     def installed_client_grant(cls, client_id: str, device_id: str | None = None,
-                               client_secret: str | None = None):
+                               client_secret: str | None = None, user_agent: str | None = None):
+        if OAuth2Client.__CLIENT is None:
+            OAuth2Client.__CLIENT = Client(http2=h2_available)
+            OAuth2Client.__CLIENT.base_url = OAUTH_URL
+            OAuth2Client.__CLIENT.follow_redirects = True
+
         device_id = device_id or "".join([choice(ascii_letters + digits) for _ in range(30)])
 
         res = OAuth2Client.__CLIENT.post(f"{BASE_URL}/{ACCESS_TOKEN_URL}", data={
             "grant_type": "https://oauth.reddit.com/grants/installed_client",
             "device_id": device_id},
                                          auth=BasicAuth(username=client_id,
-                                                        password=client_secret or ""))
+                                                        password=client_secret or ""),
+                                         headers={"User-Agent": user_agent or USER_AGENT})
 
         if res.status_code >= 400:
             raise RESTException(res)
@@ -403,7 +444,8 @@ class OAuth2Client:
         token: OAuth2Token = res.json()
         token_issued_at = parsedate_to_datetime(res.headers["Date"])
 
-        return cls(client_id, token, token_issued_at=token_issued_at, client_secret=client_secret)
+        return cls(client_id, token, token_issued_at=token_issued_at, client_secret=client_secret,
+                   user_agent=user_agent)
 
     @property
     def me(self):
@@ -413,7 +455,13 @@ class OAuth2Client:
 
     @classmethod
     def password_grant(cls, client_id: str, username: str, password: str,
-                       two_factor_code: str | None = None, client_secret: str | None = None):
+                       two_factor_code: str | None = None, client_secret: str | None = None,
+                       user_agent: str | None = None):
+        if OAuth2Client.__CLIENT is None:
+            OAuth2Client.__CLIENT = Client(http2=h2_available)
+            OAuth2Client.__CLIENT.base_url = OAUTH_URL
+            OAuth2Client.__CLIENT.follow_redirects = True
+
         if two_factor_code is not None:
             if not (len(two_factor_code) == 6 and two_factor_code.isnumeric()):
                 raise ValueError("Invalid two factor code! Must be of length" +
@@ -425,7 +473,8 @@ class OAuth2Client:
                                          data={"grant_type": "password", "username": username,
                                                "password": password},
                                          auth=BasicAuth(username=client_id,
-                                                        password=client_secret or ""))
+                                                        password=client_secret or ""),
+                                         headers={"User-Agent": user_agent or USER_AGENT})
 
         if res.status_code >= 400:
             raise RESTException(res)
@@ -433,7 +482,8 @@ class OAuth2Client:
         token: OAuth2Token = res.json()
         token_issued_at = parsedate_to_datetime(res.headers["Date"])
 
-        return cls(client_id, token, token_issued_at=token_issued_at, client_secret=client_secret)
+        return cls(client_id, token, token_issued_at=token_issued_at, client_secret=client_secret,
+                   user_agent=user_agent)
 
     def posts(self, subreddit: str | None = None, sort: ListingSort = ListingSort.BEST,
               before: str | None = None, limit: int | None = None):
@@ -456,7 +506,8 @@ class OAuth2Client:
 
         res = OAuth2Client.__CLIENT.post(f"{BASE_URL}/{REVOKE_TOKEN_URL}", data=data,
                                          auth=BasicAuth(username=self.__client_id,
-                                                        password=self.__client_secret or ""))
+                                                        password=self.__client_secret or ""),
+                                         headers={"User-Agent": self.__user_agent or USER_AGENT})
 
         if res.status_code >= 400:
             raise RESTException(res)
@@ -467,8 +518,14 @@ class OAuth2Client:
         return self._request("POST", "api/sendreplies", data={"id": thing_id, "state": state})
 
     @staticmethod
-    def scopes():
-        res = OAuth2Client.__CLIENT.get(f"{BASE_URL}/{SCOPES_URL}")
+    def scopes(user_agent: str | None = None):
+        if OAuth2Client.__CLIENT is None:
+            OAuth2Client.__CLIENT = Client(http2=h2_available)
+            OAuth2Client.__CLIENT.base_url = OAUTH_URL
+            OAuth2Client.__CLIENT.follow_redirects = True
+
+        res = OAuth2Client.__CLIENT.get(f"{BASE_URL}/{SCOPES_URL}",
+                                        headers={"User-Agent": user_agent or USER_AGENT})
 
         if res.status_code >= 400:
             raise RESTException(res)
@@ -669,3 +726,11 @@ class OAuth2Client:
             media_asset_status = None
 
         return media_submission, media_asset_status
+
+    @property
+    def token(self):
+        return self.__token
+
+    @property
+    def token_issued_at(self):
+        return self.__token_issued_at
